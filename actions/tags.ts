@@ -31,7 +31,7 @@ export async function getGroupTags(groupId: string) {
   try {
     await requireAuth();
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data, error } = await supabase
       .rpc('get_group_tags', { group_id_param: groupId });
 
@@ -48,7 +48,7 @@ export async function createTag(tagData: CreateTagData) {
   try {
     const user = await requireAuth();
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: tag, error } = await supabase
       .from('tags')
       .insert({
@@ -79,7 +79,7 @@ export async function updateTag(tagData: UpdateTagData) {
     if (tagData.title !== undefined) updateData.title = tagData.title.trim();
     if (tagData.color !== undefined) updateData.color = tagData.color;
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: tag, error } = await supabase
       .from('tags')
       .update(updateData)
@@ -102,7 +102,7 @@ export async function deleteTag(tagId: string) {
   try {
     await requireAuth();
 
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Get group_id before deleting
     const { data: tag } = await supabase
@@ -134,7 +134,7 @@ export async function addTagsToAnnouncement(announcementId: string, tagIds: stri
   try {
     await requireAuth();
 
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Insert tags
     const tagsToInsert = tagIds.map(tagId => ({
@@ -171,7 +171,7 @@ export async function removeTagsFromAnnouncement(announcementId: string, tagIds:
   try {
     await requireAuth();
 
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { error } = await supabase
       .from('announcement_tags')
@@ -204,7 +204,7 @@ export async function getAnnouncementTags(announcementId: string) {
   try {
     await requireAuth();
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data, error } = await supabase
       .rpc('get_announcement_tags', { announcement_id_param: announcementId });
 
