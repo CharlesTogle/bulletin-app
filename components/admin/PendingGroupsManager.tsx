@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useServerAction } from '@/lib/hooks/useServerAction';
+import { useServerAction, useServerActionWithParams } from '@/lib/hooks/useServerAction';
 import {
   getPendingGroups,
   approveGroup,
@@ -38,7 +38,7 @@ export function PendingGroupsManager() {
   const {
     isLoading: approving,
     execute: executeApprove,
-  } = useServerAction(approveGroup, {
+  } = useServerActionWithParams(approveGroup, {
     key: 'approve-group',
     onSuccess: () => {
       setConfirmAction(null);
@@ -53,7 +53,7 @@ export function PendingGroupsManager() {
   const {
     isLoading: rejecting,
     execute: executeReject,
-  } = useServerAction(rejectGroup, {
+  } = useServerActionWithParams(rejectGroup, {
     key: 'reject-group',
     onSuccess: () => {
       setConfirmAction(null);
