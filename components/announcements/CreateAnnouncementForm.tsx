@@ -8,6 +8,7 @@ import { createAnnouncement } from '@/actions/announcements';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { TimePicker } from '@/components/ui/time-picker';
 
 interface CreateAnnouncementFormProps {
   groupId: string;
@@ -21,7 +22,8 @@ export function CreateAnnouncementForm({
   const router = useRouter();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [deadline, setDeadline] = useState('');
+  const [deadlineDate, setDeadlineDate] = useState('');
+  const [deadlineTime, setDeadlineTime] = useState('');
 
   const { isLoading, error, execute } = useServerActionWithParams(
     createAnnouncement,
@@ -31,7 +33,8 @@ export function CreateAnnouncementForm({
         // Reset form
         setTitle('');
         setContent('');
-        setDeadline('');
+        setDeadlineDate('');
+        setDeadlineTime('');
 
         if (onSuccess) {
           onSuccess();
@@ -53,11 +56,22 @@ export function CreateAnnouncementForm({
       return;
     }
 
+    // Combine date and time into datetime string if both are provided
+    let deadline: string | undefined = undefined;
+    if (deadlineDate) {
+      if (deadlineTime) {
+        deadline = `${deadlineDate}T${deadlineTime}`;
+      } else {
+        // If only date is provided, default to 23:59
+        deadline = `${deadlineDate}T23:59`;
+      }
+    }
+
     await execute({
       groupId,
       title: title.trim(),
       content: content.trim(),
-      deadline: deadline || undefined,
+      deadline,
     });
   }
 
@@ -107,17 +121,44 @@ export function CreateAnnouncementForm({
           </div>
 
           {/* Deadline (Optional) */}
-          <div>
-            <label htmlFor="deadline" className="block text-sm font-medium mb-2">
+          <div className="space-y-3">
+            <label className="block text-sm font-medium">
               Deadline (Optional)
             </label>
-            <Input
-              id="deadline"
-              type="datetime-local"
-              value={deadline}
-              onChange={(e) => setDeadline(e.target.value)}
-              disabled={isLoading}
-            />
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {/* Date */}
+              <div>
+                <label htmlFor="deadlineDate" className="block text-xs text-muted-foreground mb-1">
+                  Date
+                </label>
+                <Input
+                  id="deadlineDate"
+                  type="date"
+                  value={deadlineDate}
+                  onChange={(e) => setDeadlineDate(e.target.value)}
+                  disabled={isLoading}
+                />
+              </div>
+
+              {/* Time */}
+              <div>
+                <label htmlFor="deadlineTime" className="block text-xs text-muted-foreground mb-1">
+                  Time
+                </label>
+                <TimePicker
+                  value={deadlineTime}
+                  onChange={setDeadlineTime}
+                  disabled={isLoading}
+                />
+              </div>
+            </div>
+
+            {deadlineDate && !deadlineTime && (
+              <p className="text-xs text-muted-foreground">
+                No time specified - will default to 11:59 PM
+              </p>
+            )}
           </div>
 
           {/* Error Display */}
