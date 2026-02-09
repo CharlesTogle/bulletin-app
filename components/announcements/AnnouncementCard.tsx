@@ -77,6 +77,27 @@ export function AnnouncementCard({
               )}
               <h3 className="font-semibold text-lg">{announcement.title}</h3>
             </div>
+
+            {/* Tags */}
+            {announcement.tags && announcement.tags.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {announcement.tags.map((tag: any) => (
+                  <span
+                    key={tag.id}
+                    className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                    style={{
+                      backgroundColor: tag.color + '20',
+                      color: tag.color,
+                      borderColor: tag.color,
+                      borderWidth: '1px',
+                    }}
+                  >
+                    {tag.title}
+                  </span>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
                 <User className="h-3 w-3" />

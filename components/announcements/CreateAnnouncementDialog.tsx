@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createAnnouncement } from '@/actions/announcements';
+import { getGroupTags, Tag } from '@/actions/tags';
 import { createClient } from '@/lib/supabase/client';
 import {
   Dialog,
@@ -38,9 +39,33 @@ export function CreateAnnouncementDialog({
   const [deadlineTime, setDeadlineTime] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const supabase = createClient();
+
+  // Load tags when dialog opens
+  useEffect(() => {
+    if (open) {
+      loadTags();
+    }
+  }, [open, groupId]);
+
+  async function loadTags() {
+    const result = await getGroupTags(groupId);
+    if (result.success && result.data) {
+      setAvailableTags(result.data);
+    }
+  }
+
+  function toggleTag(tagId: string) {
+    setSelectedTagIds((prev) =>
+      prev.includes(tagId)
+        ? prev.filter((id) => id !== tagId)
+        : [...prev, tagId]
+    );
+  }
 
   function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -148,6 +173,7 @@ export function CreateAnnouncementDialog({
         content: content.trim(),
         deadline,
         imageUrl,
+        tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
       });
 
       if (!result.success) {
@@ -160,6 +186,7 @@ export function CreateAnnouncementDialog({
       setContent('');
       setDeadlineDate('');
       setDeadlineTime('');
+      setSelectedTagIds([]);
       removeImage();
       onOpenChange(false);
       onSuccess();
@@ -259,6 +286,39 @@ export function CreateAnnouncementDialog({
                   : 'Set a deadline for time-sensitive announcements'}
               </p>
             </div>
+
+            {/* Tags (Optional) */}
+            {availableTags.length > 0 && (
+              <div className="space-y-2">
+                <Label>Tags (Optional)</Label>
+                <div className="flex flex-wrap gap-2">
+                  {availableTags.map((tag) => (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      onClick={() => toggleTag(tag.id)}
+                      disabled={loading}
+                      className="inline-flex items-center px-3 py-1.5 rounded text-sm font-medium transition-all hover:scale-105"
+                      style={{
+                        backgroundColor: selectedTagIds.includes(tag.id)
+                          ? tag.color
+                          : tag.color + '20',
+                        color: selectedTagIds.includes(tag.id)
+                          ? '#ffffff'
+                          : tag.color,
+                        borderColor: tag.color,
+                        borderWidth: '1px',
+                      }}
+                    >
+                      {tag.title}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Select tags to categorize your announcement
+                </p>
+              </div>
+            )}
 
             {/* Image Upload (Optional) */}
             <div className="space-y-2">
