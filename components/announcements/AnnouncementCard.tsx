@@ -1,6 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import { voteAnnouncement } from '@/actions/announcements';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -131,8 +134,13 @@ export function AnnouncementCard({
         )}
 
         {/* Content */}
-        <div className="prose prose-sm max-w-none">
-          <p className="whitespace-pre-wrap text-sm">{announcement.content}</p>
+        <div className="prose prose-sm max-w-none dark:prose-invert">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeRaw]}
+          >
+            {announcement.content}
+          </ReactMarkdown>
         </div>
 
         {/* Category & Tags */}
