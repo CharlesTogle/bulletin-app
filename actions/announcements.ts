@@ -279,7 +279,30 @@ export async function getGroupAnnouncements(
 
     if (error) throw error;
 
-    return { success: true, data: data as AnnouncementWithDetails[] };
+    // Get current user ID
+    const user = await requireAuth();
+
+    // Fetch user's votes for these announcements
+    const announcementIds = data?.map(a => a.id) || [];
+    const { data: votes } = await supabase
+      .from('votes')
+      .select('announcement_id, vote_type')
+      .eq('user_id', user.id)
+      .in('announcement_id', announcementIds);
+
+    // Create a map of announcement_id -> vote_type
+    const voteMap = votes?.reduce((acc, vote) => {
+      acc[vote.announcement_id] = vote.vote_type;
+      return acc;
+    }, {} as Record<string, string>) || {};
+
+    // Add user_vote to each announcement
+    const dataWithVotes = data?.map(announcement => ({
+      ...announcement,
+      user_vote: voteMap[announcement.id] || null,
+    }));
+
+    return { success: true, data: dataWithVotes as AnnouncementWithDetails[] };
   } catch (error) {
     console.error('Failed to get announcements:', error);
     return {
@@ -359,6 +382,82 @@ export async function checkAnnouncementPermissions(announcementId: string): Prom
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to check permissions',
+    };
+  }
+}
+
+// ============================================================================
+// VOTE ON ANNOUNCEMENT (All Members)
+// ============================================================================
+
+/**
+ * Vote on an announcement (upvote or downvote)
+ * Clicking the same vote type again removes the vote
+ */
+export async function voteAnnouncement(
+  announcementId: string,
+  voteType: 'upvote' | 'downvote'
+): Promise<ActionResponse<void>> {
+  try {
+    const user = await requireAuth();
+    const supabase = await createClient();
+
+    // Check if user already voted
+    const { data: existingVote } = await supabase
+      .from('votes')
+      .select('id, vote_type')
+      .eq('announcement_id', announcementId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (existingVote) {
+      // If same vote type, remove vote (toggle off)
+      if (existingVote.vote_type === voteType) {
+        const { error } = await supabase
+          .from('votes')
+          .delete()
+          .eq('id', existingVote.id);
+
+        if (error) throw error;
+      } else {
+        // Change vote type
+        const { error } = await supabase
+          .from('votes')
+          .update({ vote_type: voteType, updated_at: new Date().toISOString() })
+          .eq('id', existingVote.id);
+
+        if (error) throw error;
+      }
+    } else {
+      // Create new vote
+      const { error } = await supabase
+        .from('votes')
+        .insert({
+          announcement_id: announcementId,
+          user_id: user.id,
+          vote_type: voteType,
+        });
+
+      if (error) throw error;
+    }
+
+    // Get announcement to revalidate group page
+    const { data: announcement } = await supabase
+      .from('announcements')
+      .select('group_id')
+      .eq('id', announcementId)
+      .single();
+
+    if (announcement) {
+      revalidatePath(`/groups/${announcement.group_id}`);
+    }
+
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error('Failed to vote:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to vote',
     };
   }
 }

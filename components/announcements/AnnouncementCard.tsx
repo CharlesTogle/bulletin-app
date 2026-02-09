@@ -1,145 +1,150 @@
 'use client';
 
 import { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Pin, Calendar, Trash2, Edit } from 'lucide-react';
-import { useServerActionWithParams } from '@/lib/hooks/useServerAction';
-import { deleteAnnouncement } from '@/actions/announcements';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { voteAnnouncement } from '@/actions/announcements';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import type { AnnouncementWithDetails } from '@/types/database';
+import {
+  ThumbsUp,
+  ThumbsDown,
+  Pin,
+  Calendar,
+  User,
+  Loader2
+} from 'lucide-react';
 
 interface AnnouncementCardProps {
-  announcement: AnnouncementWithDetails;
-  canEdit?: boolean;
-  canDelete?: boolean;
-  onEdit?: () => void;
-  onDeleted?: () => void;
+  announcement: any;
+  userRole: 'admin' | 'contributor' | 'member' | null;
+  onRefresh: () => void;
 }
 
 export function AnnouncementCard({
   announcement,
-  canEdit = false,
-  canDelete = false,
-  onEdit,
-  onDeleted,
+  userRole,
+  onRefresh,
 }: AnnouncementCardProps) {
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [voting, setVoting] = useState(false);
 
-  const { isLoading, execute: executeDelete } = useServerActionWithParams(
-    deleteAnnouncement,
-    {
-      key: `delete-announcement-${announcement.id}`,
-      onSuccess: () => {
-        onDeleted?.();
-      },
-      onError: (error) => {
-        alert(`Failed to delete: ${error}`);
-      },
-    }
-  );
-
-  async function handleDelete() {
-    if (showConfirm) {
-      await executeDelete(announcement.id);
-    } else {
-      setShowConfirm(true);
-      setTimeout(() => setShowConfirm(false), 3000);
+  async function handleVote(voteType: 'upvote' | 'downvote') {
+    setVoting(true);
+    try {
+      const result = await voteAnnouncement(announcement.id, voteType);
+      if (result.success) {
+        onRefresh();
+      } else {
+        alert(result.error || 'Failed to vote');
+      }
+    } catch (err) {
+      console.error('Vote error:', err);
+    } finally {
+      setVoting(false);
     }
   }
 
+  const userVote = announcement.user_vote;
+  const netVotes = (announcement.upvotes_count || 0) - (announcement.downvotes_count || 0);
+
   return (
     <Card className={announcement.is_pinned ? 'border-primary' : ''}>
-      <CardHeader>
-        <div className="flex items-start justify-between">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-1">
               {announcement.is_pinned && (
                 <Pin className="h-4 w-4 text-primary" />
               )}
-              <CardTitle className="text-xl">{announcement.title}</CardTitle>
+              <h3 className="font-semibold text-lg">{announcement.title}</h3>
             </div>
-
-            <div className="flex flex-wrap gap-2 items-center text-sm text-muted-foreground">
-              <span>By {announcement.author_email}</span>
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <User className="h-3 w-3" />
+                {announcement.author_email || 'Unknown'}
+              </span>
               <span>•</span>
               <span>{new Date(announcement.created_at).toLocaleDateString()}</span>
-
               {announcement.deadline && (
                 <>
                   <span>•</span>
-                  <div className="flex items-center gap-1">
+                  <span className="flex items-center gap-1 text-amber-600">
                     <Calendar className="h-3 w-3" />
-                    <span>
-                      Due: {new Date(announcement.deadline).toLocaleDateString()}
-                    </span>
-                  </div>
+                    Due: {new Date(announcement.deadline).toLocaleDateString()}
+                  </span>
                 </>
               )}
             </div>
-
-            {/* Category & Tags */}
-            <div className="flex flex-wrap gap-2 mt-2">
-              {announcement.category_name && (
-                <Badge
-                  variant="secondary"
-                  style={{ backgroundColor: announcement.category_color || undefined }}
-                >
-                  {announcement.category_name}
-                </Badge>
-              )}
-              {announcement.tag_names?.map((tag) => (
-                <Badge key={tag} variant="outline">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
           </div>
-
-          {/* Actions */}
-          {(canEdit || canDelete) && (
-            <div className="flex gap-2">
-              {canEdit && onEdit && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onEdit}
-                  disabled={isLoading}
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-              )}
-              {canDelete && (
-                <Button
-                  variant={showConfirm ? 'destructive' : 'ghost'}
-                  size="sm"
-                  onClick={handleDelete}
-                  disabled={isLoading}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  {showConfirm && <span className="ml-1">Confirm?</span>}
-                </Button>
-              )}
-            </div>
-          )}
         </div>
       </CardHeader>
-
-      <CardContent>
-        {/* Markdown Content */}
-        <div className="prose prose-neutral dark:prose-invert max-w-none">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {announcement.content}
-          </ReactMarkdown>
+      <CardContent className="space-y-4">
+        {/* Content */}
+        <div className="prose prose-sm max-w-none">
+          <p className="whitespace-pre-wrap text-sm">{announcement.content}</p>
         </div>
 
-        {/* Vote Display */}
-        <div className="mt-4 flex items-center gap-4 text-sm text-muted-foreground">
-          <span>👍 {announcement.upvotes_count} upvotes</span>
-          <span>👎 {announcement.downvotes_count} downvotes</span>
-          <span>Score: {announcement.net_votes}</span>
+        {/* Category & Tags */}
+        {announcement.category_name && (
+          <div className="flex gap-2">
+            <Badge variant="secondary">
+              {announcement.category_name}
+            </Badge>
+          </div>
+        )}
+
+        {/* Voting */}
+        <div className="flex items-center gap-2 pt-2 border-t">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleVote('upvote')}
+            disabled={voting}
+            className="gap-1"
+          >
+            {voting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ThumbsUp
+                className={`h-4 w-4 ${
+                  userVote === 'upvote'
+                    ? 'fill-current text-primary font-bold'
+                    : 'text-muted-foreground'
+                }`}
+              />
+            )}
+            <span className={userVote === 'upvote' ? 'font-semibold' : ''}>
+              {announcement.upvotes_count || 0}
+            </span>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleVote('downvote')}
+            disabled={voting}
+            className="gap-1"
+          >
+            {voting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ThumbsDown
+                className={`h-4 w-4 ${
+                  userVote === 'downvote'
+                    ? 'fill-current text-destructive font-bold'
+                    : 'text-muted-foreground'
+                }`}
+              />
+            )}
+            <span className={userVote === 'downvote' ? 'font-semibold' : ''}>
+              {announcement.downvotes_count || 0}
+            </span>
+          </Button>
+
+          <div className="flex-1 text-right">
+            <Badge variant="outline" className={netVotes > 0 ? 'text-green-600' : netVotes < 0 ? 'text-red-600' : ''}>
+              {netVotes > 0 ? '+' : ''}{netVotes}
+            </Badge>
+          </div>
         </div>
       </CardContent>
     </Card>

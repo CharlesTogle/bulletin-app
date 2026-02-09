@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
 /**
@@ -46,6 +47,43 @@ export async function createClient() {
             // user sessions.
           }
         },
+      },
+    }
+  );
+}
+
+/**
+ * Create a Supabase admin client with service role privileges
+ *
+ * IMPORTANT: Only use for admin operations that require bypassing RLS.
+ * This client has full database access - use with caution!
+ *
+ * Common use cases:
+ * - Accessing auth.users table
+ * - Admin operations that need to bypass RLS
+ * - System-level queries
+ *
+ * @example
+ * ```typescript
+ * 'use server';
+ *
+ * import { createAdminClient } from '@/lib/supabase/server';
+ *
+ * export async function getUserEmails(userIds: string[]) {
+ *   const supabase = createAdminClient();
+ *   const { data: { users } } = await supabase.auth.admin.listUsers();
+ *   return users.filter(u => userIds.includes(u.id));
+ * }
+ * ```
+ */
+export function createAdminClient() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
       },
     }
   );

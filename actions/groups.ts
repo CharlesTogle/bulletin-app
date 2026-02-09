@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import type { Group, GroupMember, GroupWithStats, ActionResponse } from '@/types/database';
@@ -60,10 +60,10 @@ export async function getMyGroups(): Promise<ActionResponse<GroupWithStats[]>> {
       return { success: true, data: groups as GroupWithStats[] };
     }
 
-    // Regular users: Get groups where user is a member
+    // Regular users: Get groups where user is a member with their role
     const { data: memberGroups, error: memberError } = await supabase
       .from('group_members')
-      .select('group_id')
+      .select('group_id, role')
       .eq('user_id', user.id);
 
     if (memberError) throw memberError;
@@ -73,6 +73,12 @@ export async function getMyGroups(): Promise<ActionResponse<GroupWithStats[]>> {
     if (groupIds.length === 0) {
       return { success: true, data: [] };
     }
+
+    // Create a map of group_id -> role for quick lookup
+    const roleMap = memberGroups?.reduce((acc, m) => {
+      acc[m.group_id] = m.role;
+      return acc;
+    }, {} as Record<string, string>) || {};
 
     // Get group details
     const { data, error } = await supabase
@@ -86,12 +92,12 @@ export async function getMyGroups(): Promise<ActionResponse<GroupWithStats[]>> {
       throw error;
     }
 
-    // For now, just return groups with default counts
-    // TODO: Add proper member counts later
+    // Include user's role in each group
     const formattedData = data?.map((g: any) => ({
       ...g,
       member_count: 0,
       admin_count: 0,
+      user_role: roleMap[g.id], // Add user's role
     }));
 
     return { success: true, data: formattedData as GroupWithStats[] };
@@ -144,13 +150,17 @@ export async function createGroup(
 
     const supabase = await createClient();
 
-    // Debug: Check if we have a valid session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    console.log('[createGroup] Session check:', {
-      hasSession: !!session,
-      userId: session?.user?.id,
-      error: sessionError
+    // Debug: Verify user with getUser() (more secure than getSession)
+    const { data: { user: verifiedUser }, error: userError } = await supabase.auth.getUser();
+    console.log('[createGroup] User verification:', {
+      verified: !!verifiedUser,
+      userId: verifiedUser?.id,
+      error: userError
     });
+
+    if (!verifiedUser) {
+      throw new Error('User verification failed - session may be invalid');
+    }
 
     // Generate unique group code
     const { data: codeData, error: codeError } = await supabase.rpc(
@@ -158,25 +168,38 @@ export async function createGroup(
       { length: 8 }
     );
 
-    if (codeError) throw codeError;
+    if (codeError) {
+      console.error('[createGroup] Code generation error:', codeError);
+      throw codeError;
+    }
 
-    // Create group
-    const { data: group, error } = await supabase
-      .from('groups')
-      .insert({
-        creator_id: user.id,
-        name: data.name,
-        code: codeData,
-        description: data.description || null,
-      })
-      .select()
-      .single();
+    console.log('[createGroup] Generated code:', codeData);
 
-    if (error) throw error;
+    // Create group using SECURITY DEFINER function (workaround for RLS issue)
+    const { data: group, error } = await supabase.rpc('create_group_safe', {
+      p_creator_id: user.id,
+      p_name: data.name,
+      p_code: codeData,
+      p_description: data.description || null,
+    });
+
+    if (error) {
+      console.error('[createGroup] Group creation error:', error);
+      throw error;
+    }
+
+    // The RPC returns an array with one row, get the first item
+    const createdGroup = Array.isArray(group) ? group[0] : group;
+
+    if (!createdGroup) {
+      throw new Error('Failed to create group - no data returned');
+    }
+
+    console.log('[createGroup] Group created successfully:', createdGroup.id);
 
     revalidatePath('/groups');
 
-    return { success: true, data: group };
+    return { success: true, data: createdGroup as Group };
   } catch (error) {
     console.error('Failed to create group:', error);
     return {
@@ -252,54 +275,40 @@ export async function deleteGroup(groupId: string): Promise<ActionResponse<void>
  */
 export async function joinGroup(groupCode: string): Promise<ActionResponse<Group>> {
   try {
-    const user = await requireAuth();
+    console.log('[joinGroup] Starting for code:', groupCode);
+    await requireAuth();
+
     const supabase = await createClient();
 
-    // Find group by code (case-insensitive)
-    const { data: group, error: groupError } = await supabase
-      .from('groups')
-      .select('*')
-      .ilike('code', groupCode)
-      .single();
+    // Use SECURITY DEFINER function to bypass RLS and join group
+    console.log('[joinGroup] Calling join_group_by_code function...');
+    const { data: group, error } = await supabase.rpc('join_group_by_code', {
+      p_group_code: groupCode.trim().toUpperCase()
+    });
 
-    if (groupError) {
-      if (groupError.code === 'PGRST116') {
-        return { success: false, error: 'Group does not exist' };
-      }
-      throw groupError;
+    if (error) {
+      console.error('[joinGroup] Error:', error);
+      // Return user-friendly error message
+      return {
+        success: false,
+        error: error.message || 'Failed to join group'
+      };
     }
 
-    // Check if group is approved (hide unapproved groups from members)
-    if (!group.approved) {
-      return { success: false, error: 'Group does not exist' };
+    // The RPC returns an array with one row
+    const joinedGroup = Array.isArray(group) ? group[0] : group;
+
+    if (!joinedGroup) {
+      return {
+        success: false,
+        error: 'Failed to join group - no data returned'
+      };
     }
 
-    // Check if already a member
-    const { data: existingMember } = await supabase
-      .from('group_members')
-      .select('id')
-      .eq('group_id', group.id)
-      .eq('user_id', user.id)
-      .single();
-
-    if (existingMember) {
-      return { success: false, error: 'You are already a member of this group' };
-    }
-
-    // Join group as member (RLS policy will enforce approved=true)
-    const { error: joinError } = await supabase
-      .from('group_members')
-      .insert({
-        group_id: group.id,
-        user_id: user.id,
-        role: 'member',
-      });
-
-    if (joinError) throw joinError;
-
+    console.log('[joinGroup] Successfully joined group:', joinedGroup.id);
     revalidatePath('/groups');
 
-    return { success: true, data: group };
+    return { success: true, data: joinedGroup as Group };
   } catch (error) {
     console.error('Failed to join group:', error);
     return {
@@ -362,68 +371,6 @@ export async function leaveGroup(groupId: string): Promise<ActionResponse<void>>
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to leave group',
-    };
-  }
-}
-
-/**
- * Get all members of a group
- */
-export async function getGroupMembers(
-  groupId: string
-): Promise<ActionResponse<GroupMember[]>> {
-  try {
-    await requireAuth();
-
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('group_members')
-      .select('*')
-      .eq('group_id', groupId)
-      .order('joined_at', { ascending: true });
-
-    if (error) throw error;
-
-    return { success: true, data };
-  } catch (error) {
-    console.error('Failed to get group members:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to fetch members',
-    };
-  }
-}
-
-/**
- * Update a member's role (admin only)
- */
-export async function updateMemberRole(
-  groupId: string,
-  userId: string,
-  role: 'admin' | 'contributor' | 'member'
-): Promise<ActionResponse<GroupMember>> {
-  try {
-    await requireAuth();
-
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('group_members')
-      .update({ role })
-      .eq('group_id', groupId)
-      .eq('user_id', userId)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    revalidatePath(`/groups/${groupId}`);
-
-    return { success: true, data };
-  } catch (error) {
-    console.error('Failed to update member role:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to update member role',
     };
   }
 }
@@ -524,6 +471,158 @@ export async function checkUserGroupApprovalStatus(): Promise<
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to check status',
+    };
+  }
+}
+
+// ============================================================================
+// MEMBER MANAGEMENT
+// ============================================================================
+
+/**
+ * Get all members of a group
+ */
+export async function getGroupMembers(
+  groupId: string
+): Promise<ActionResponse<Array<{
+  id: string;
+  user_id: string;
+  role: 'admin' | 'contributor' | 'member';
+  joined_at: string;
+  email: string;
+}>>> {
+  try {
+    const user = await requireAuth();
+    const supabase = await createClient();
+
+    // Check if user is a member of the group
+    const { data: membership } = await supabase
+      .from('group_members')
+      .select('role')
+      .eq('group_id', groupId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (!membership) {
+      return { success: false, error: 'You are not a member of this group' };
+    }
+
+    // Get all members with their email from auth.users
+    const { data: members, error } = await supabase
+      .from('group_members')
+      .select(`
+        id,
+        user_id,
+        role,
+        joined_at
+      `)
+      .eq('group_id', groupId)
+      .order('joined_at', { ascending: true });
+
+    if (error) throw error;
+
+    // Get user emails using admin client
+    const adminClient = createAdminClient();
+    const userIds = members?.map(m => m.user_id) || [];
+    const { data: { users } } = await adminClient.auth.admin.listUsers();
+    const userMap = users?.reduce((acc, u) => {
+      acc[u.id] = u.email || 'Unknown';
+      return acc;
+    }, {} as Record<string, string>) || {};
+
+    const membersWithEmails = members?.map(m => ({
+      ...m,
+      email: userMap[m.user_id] || 'Unknown',
+    }));
+
+    return { success: true, data: membersWithEmails || [] };
+  } catch (error) {
+    console.error('Failed to get group members:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch members',
+    };
+  }
+}
+
+/**
+ * Update a member's role (admin only)
+ * Note: Admins can only promote members to contributor or demote to member.
+ * They cannot promote other members to admin.
+ */
+export async function updateMemberRole(
+  groupId: string,
+  memberId: string,
+  newRole: 'contributor' | 'member'
+): Promise<ActionResponse<void>> {
+  try {
+    const user = await requireAuth();
+    const supabase = await createClient();
+
+    // Check if current user is an admin
+    const { data: currentUserMembership } = await supabase
+      .from('group_members')
+      .select('role')
+      .eq('group_id', groupId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (!currentUserMembership || currentUserMembership.role !== 'admin') {
+      return { success: false, error: 'Only admins can change member roles' };
+    }
+
+    // Get the target member's user_id
+    const { data: targetMember } = await supabase
+      .from('group_members')
+      .select('user_id')
+      .eq('id', memberId)
+      .single();
+
+    // Prevent users from changing their own role
+    if (targetMember?.user_id === user.id) {
+      return {
+        success: false,
+        error: 'You cannot change your own role',
+      };
+    }
+
+    // Note: The check below is now redundant since users can't change their own role,
+    // but keeping it as a safeguard
+    // Prevent admin from demoting themselves if they're the only admin
+    if (targetMember?.user_id === user.id && newRole !== 'admin') {
+      const { data: adminCount } = await supabase
+        .from('group_members')
+        .select('id', { count: 'exact', head: true })
+        .eq('group_id', groupId)
+        .eq('role', 'admin');
+
+      if (adminCount && (adminCount as any).count <= 1) {
+        return {
+          success: false,
+          error: 'Cannot demote yourself - group must have at least one admin',
+        };
+      }
+    }
+
+    // Update the role
+    const { data, error } = await supabase
+      .from('group_members')
+      .update({ role: newRole })
+      .eq('id', memberId)
+      .select();
+
+    console.log('Update result:', { data, error, memberId, newRole });
+
+    if (error) throw error;
+
+    revalidatePath(`/groups/${groupId}`);
+
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error('Failed to update member role:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update role',
     };
   }
 }
