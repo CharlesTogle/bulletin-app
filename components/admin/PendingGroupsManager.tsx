@@ -13,12 +13,16 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Check, X, Clock, RefreshCw, AlertCircle } from 'lucide-react';
 
+interface PendingGroupsManagerProps {
+  onGroupChange?: () => void;
+}
+
 /**
  * Pending Groups Manager Component
  *
  * System admin component for approving/rejecting groups
  */
-export function PendingGroupsManager() {
+export function PendingGroupsManager({ onGroupChange }: PendingGroupsManagerProps) {
   const [confirmAction, setConfirmAction] = useState<{
     groupId: string;
     action: 'approve' | 'reject';
@@ -43,6 +47,7 @@ export function PendingGroupsManager() {
     onSuccess: () => {
       setConfirmAction(null);
       fetchPending();
+      onGroupChange?.(); // Refresh parent's group list
     },
     onError: (error) => {
       alert(`Failed to approve: ${error}`);
@@ -58,6 +63,7 @@ export function PendingGroupsManager() {
     onSuccess: () => {
       setConfirmAction(null);
       fetchPending();
+      onGroupChange?.(); // Refresh parent's group list
     },
     onError: (error) => {
       alert(`Failed to reject: ${error}`);

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useServerAction } from '@/lib/hooks/useServerAction';
@@ -11,11 +11,15 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Users, Plus, Settings, Shield, AlertCircle, Loader2 } from 'lucide-react';
+import { CreateGroupDialog } from '@/components/dialogs/CreateGroupDialog';
+import { JoinGroupDialog } from '@/components/dialogs/JoinGroupDialog';
 
 export default function DashboardPage() {
   const router = useRouter();
   const supabase = createClient();
-  const [userEmail, setUserEmail] = React.useState<string>('');
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [joinDialogOpen, setJoinDialogOpen] = useState(false);
 
   // Check if user is system admin
   const {
@@ -164,34 +168,32 @@ export default function DashboardPage() {
             </Alert>
           )}
 
-          {/* Quick Actions - Hidden for system admins */}
-          {!adminStatus?.isSystemAdmin && (
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card className="hover:border-primary transition-colors cursor-pointer" onClick={() => router.push('/signup')}>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Plus className="h-5 w-5" />
-                    Create New Group
-                  </CardTitle>
-                  <CardDescription>
-                    Start a new group and invite members
-                  </CardDescription>
-                </CardHeader>
-              </Card>
+          {/* Quick Actions */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card className="hover:border-primary transition-colors cursor-pointer" onClick={() => setCreateDialogOpen(true)}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Plus className="h-5 w-5" />
+                  Create New Group
+                </CardTitle>
+                <CardDescription>
+                  Start a new group and invite members
+                </CardDescription>
+              </CardHeader>
+            </Card>
 
-              <Card className="hover:border-primary transition-colors cursor-pointer" onClick={() => router.push('/signup')}>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    Join Existing Group
-                  </CardTitle>
-                  <CardDescription>
-                    Join a group using an invite code
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            </div>
-          )}
+            <Card className="hover:border-primary transition-colors cursor-pointer" onClick={() => setJoinDialogOpen(true)}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Join Existing Group
+                </CardTitle>
+                <CardDescription>
+                  Join a group using an invite code
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </div>
 
           {/* Groups Section */}
           <Card>
@@ -221,11 +223,11 @@ export default function DashboardPage() {
                     Create a new group or join an existing one to get started
                   </p>
                   <div className="flex gap-2 justify-center">
-                    <Button onClick={() => router.push('/signup')}>
+                    <Button onClick={() => setCreateDialogOpen(true)}>
                       <Plus className="h-4 w-4 mr-2" />
                       Create Group
                     </Button>
-                    <Button variant="outline" onClick={() => router.push('/signup')}>
+                    <Button variant="outline" onClick={() => setJoinDialogOpen(true)}>
                       <Users className="h-4 w-4 mr-2" />
                       Join Group
                     </Button>
@@ -236,8 +238,22 @@ export default function DashboardPage() {
                   {groups?.map((group) => (
                     <div
                       key={group.id}
-                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                      onClick={() => router.push(`/groups/${group.id}`)}
+                      className={`flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors ${
+                        !adminStatus?.isSystemAdmin ? 'cursor-pointer' : ''
+                      }`}
+                      onClick={() => {
+                        // System admins shouldn't navigate to groups
+                        if (adminStatus?.isSystemAdmin) {
+                          return;
+                        }
+
+                        // Regular users: if group is not approved, go to pending approval page
+                        if (!(group as any).approved) {
+                          router.push('/pending-approval');
+                        } else {
+                          router.push(`/groups/${group.id}`);
+                        }
+                      }}
                     >
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
@@ -245,6 +261,24 @@ export default function DashboardPage() {
                           {!(group as any).approved && (
                             <Badge variant="outline" className="text-amber-600">
                               Pending Approval
+                            </Badge>
+                          )}
+                          {!adminStatus?.isSystemAdmin && (group as any).user_role && (
+                            <Badge
+                              variant="outline"
+                              className={
+                                (group as any).user_role === 'admin'
+                                  ? 'border-primary text-primary'
+                                  : (group as any).user_role === 'contributor'
+                                  ? 'border-blue-600 text-blue-600'
+                                  : 'border-muted-foreground text-muted-foreground'
+                              }
+                            >
+                              {(group as any).user_role === 'admin'
+                                ? 'Admin'
+                                : (group as any).user_role === 'contributor'
+                                ? 'Contributor'
+                                : 'Member'}
                             </Badge>
                           )}
                         </div>
@@ -284,6 +318,10 @@ export default function DashboardPage() {
           </Card>
         </div>
       </main>
+
+      {/* Dialogs */}
+      <CreateGroupDialog open={createDialogOpen} onOpenChange={setCreateDialogOpen} />
+      <JoinGroupDialog open={joinDialogOpen} onOpenChange={setJoinDialogOpen} />
     </div>
   );
 }

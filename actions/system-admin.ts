@@ -198,11 +198,16 @@ export async function approveGroup(
   groupId: string
 ): Promise<ActionResponse<void>> {
   try {
+    console.log('[approveGroup] Starting for groupId:', groupId);
     const currentUser = await requireAuth();
+    console.log('[approveGroup] User authenticated:', currentUser.id);
+
     await requireSystemAdmin('Only system admins can approve groups');
+    console.log('[approveGroup] System admin verified');
 
     const supabase = await createClient();
 
+    console.log('[approveGroup] Updating group...');
     const { error } = await supabase
       .from('groups')
       .update({
@@ -212,15 +217,19 @@ export async function approveGroup(
       })
       .eq('id', groupId);
 
-    if (error) throw error;
+    if (error) {
+      console.error('[approveGroup] Update error:', error);
+      throw error;
+    }
 
+    console.log('[approveGroup] Group approved successfully');
     revalidatePath('/admin/groups');
     revalidatePath('/admin/pending');
     revalidatePath(`/groups/${groupId}`);
 
     return { success: true, data: undefined };
   } catch (error) {
-    console.error('Failed to approve group:', error);
+    console.error('[approveGroup] Failed:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to approve group',
@@ -229,30 +238,42 @@ export async function approveGroup(
 }
 
 /**
- * Reject and delete a group
+ * Reject a group (marks as rejected without deletion)
  */
 export async function rejectGroup(
   groupId: string
 ): Promise<ActionResponse<void>> {
   try {
+    console.log('[rejectGroup] Starting for groupId:', groupId);
+
+    const currentUser = await requireAuth();
     await requireSystemAdmin('Only system admins can reject groups');
+    console.log('[rejectGroup] System admin verified');
 
     const supabase = await createClient();
 
-    // Delete the group (cascade will remove members)
+    // Mark group as rejected instead of deleting
+    console.log('[rejectGroup] Marking group as rejected...');
     const { error } = await supabase
       .from('groups')
-      .delete()
+      .update({
+        rejected_at: new Date().toISOString(),
+        rejected_by: currentUser.id,
+      })
       .eq('id', groupId);
 
-    if (error) throw error;
+    if (error) {
+      console.error('[rejectGroup] Update error:', error);
+      throw error;
+    }
 
+    console.log('[rejectGroup] Group rejected successfully');
     revalidatePath('/admin/groups');
     revalidatePath('/admin/pending');
 
     return { success: true, data: undefined };
   } catch (error) {
-    console.error('Failed to reject group:', error);
+    console.error('[rejectGroup] Failed:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to reject group',

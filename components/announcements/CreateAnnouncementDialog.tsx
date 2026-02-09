@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { createAnnouncement } from '@/actions/announcements';
+import { createClient } from '@/lib/supabase/client';
 import {
   Dialog,
   DialogContent,
@@ -15,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Image as ImageIcon, X } from 'lucide-react';
 
 interface CreateAnnouncementDialogProps {
   open: boolean;
@@ -33,8 +34,77 @@ export function CreateAnnouncementDialog({
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [deadline, setDeadline] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const supabase = createClient();
+
+  function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file');
+      return;
+    }
+
+    // Validate file size (4MB max)
+    const maxSize = 4 * 1024 * 1024; // 4MB in bytes
+    if (file.size > maxSize) {
+      setError('Image must be less than 4MB');
+      return;
+    }
+
+    setImageFile(file);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+    setError('');
+  }
+
+  function removeImage() {
+    setImageFile(null);
+    setImagePreview(null);
+  }
+
+  async function uploadImage(): Promise<string | null> {
+    if (!imageFile) return null;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Create unique filename
+      const fileExt = imageFile.name.split('.').pop();
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('announcement-images')
+        .upload(fileName, imageFile, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (error) throw error;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('announcement-images')
+        .getPublicUrl(data.path);
+
+      return publicUrl;
+    } catch (err) {
+      console.error('Image upload error:', err);
+      throw err;
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -53,11 +123,18 @@ export function CreateAnnouncementDialog({
     setLoading(true);
 
     try {
+      // Upload image first if provided
+      let imageUrl: string | undefined;
+      if (imageFile) {
+        imageUrl = await uploadImage() || undefined;
+      }
+
       const result = await createAnnouncement({
         groupId,
         title: title.trim(),
         content: content.trim(),
         deadline: deadline || undefined,
+        imageUrl,
       });
 
       if (!result.success) {
@@ -69,6 +146,7 @@ export function CreateAnnouncementDialog({
       setTitle('');
       setContent('');
       setDeadline('');
+      removeImage();
       onOpenChange(false);
       onSuccess();
     } catch (err) {
@@ -138,6 +216,44 @@ export function CreateAnnouncementDialog({
               />
               <p className="text-xs text-muted-foreground">
                 Set a deadline for time-sensitive announcements
+              </p>
+            </div>
+
+            {/* Image Upload (Optional) */}
+            <div className="space-y-2">
+              <Label htmlFor="image">Image (Optional)</Label>
+              {!imagePreview ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="image"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageSelect}
+                    disabled={loading}
+                    className="cursor-pointer"
+                  />
+                </div>
+              ) : (
+                <div className="relative">
+                  <img
+                    src={imagePreview}
+                    alt="Preview"
+                    className="w-full h-48 object-cover rounded-lg border"
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute top-2 right-2"
+                    onClick={removeImage}
+                    disabled={loading}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                PNG, JPG, GIF or WebP (max 4MB)
               </p>
             </div>
 

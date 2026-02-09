@@ -18,14 +18,17 @@ interface AnnouncementCardProps {
   announcement: any;
   userRole: 'admin' | 'contributor' | 'member' | null;
   onRefresh: () => void;
+  onPin?: (announcementId: string) => Promise<void>;
 }
 
 export function AnnouncementCard({
   announcement,
   userRole,
   onRefresh,
+  onPin,
 }: AnnouncementCardProps) {
   const [voting, setVoting] = useState(false);
+  const [pinning, setPinning] = useState(false);
 
   async function handleVote(voteType: 'upvote' | 'downvote') {
     setVoting(true);
@@ -40,6 +43,20 @@ export function AnnouncementCard({
       console.error('Vote error:', err);
     } finally {
       setVoting(false);
+    }
+  }
+
+  async function handlePin() {
+    if (!onPin) return;
+
+    setPinning(true);
+    try {
+      await onPin(announcement.id);
+      onRefresh();
+    } catch (err) {
+      console.error('Pin error:', err);
+    } finally {
+      setPinning(false);
     }
   }
 
@@ -75,9 +92,44 @@ export function AnnouncementCard({
               )}
             </div>
           </div>
+
+          {/* Pin Button (Admin & Contributor) */}
+          {userRole && ['admin', 'contributor'].includes(userRole) && onPin && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handlePin}
+              disabled={pinning}
+            >
+              {pinning ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : announcement.is_pinned ? (
+                <>
+                  <Pin className="h-4 w-4 mr-1 fill-current" />
+                  Unpin
+                </>
+              ) : (
+                <>
+                  <Pin className="h-4 w-4 mr-1" />
+                  Pin
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Image */}
+        {announcement.image_url && (
+          <div className="rounded-lg overflow-hidden border">
+            <img
+              src={announcement.image_url}
+              alt={announcement.title}
+              className="w-full h-auto max-h-96 object-cover"
+            />
+          </div>
+        )}
+
         {/* Content */}
         <div className="prose prose-sm max-w-none">
           <p className="whitespace-pre-wrap text-sm">{announcement.content}</p>

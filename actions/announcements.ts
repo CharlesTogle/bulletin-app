@@ -27,6 +27,7 @@ export async function createAnnouncement(data: {
   categoryId?: string;
   tagIds?: string[];
   deadline?: string; // ISO 8601 string
+  imageUrl?: string;
 }): Promise<ActionResponse<Announcement>> {
   try {
     const user = await requireAuth();
@@ -50,6 +51,7 @@ export async function createAnnouncement(data: {
         content: data.content,
         category_id: data.categoryId || null,
         deadline: data.deadline || null,
+        image_url: data.imageUrl || null,
       })
       .select()
       .single();
@@ -230,8 +232,18 @@ export async function getGroupAnnouncements(
     includeArchived?: boolean;
     categoryId?: string;
     tagId?: string;
+    page?: number;
+    pageSize?: number;
+    sortBy?: 'created_at' | 'deadline';
+    sortOrder?: 'asc' | 'desc';
   }
-): Promise<ActionResponse<AnnouncementWithDetails[]>> {
+): Promise<ActionResponse<{
+  data: AnnouncementWithDetails[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}>> {
   try {
     await requireAuth();
 
@@ -243,12 +255,17 @@ export async function getGroupAnnouncements(
 
     const supabase = await createClient();
 
+    // Pagination defaults
+    const page = options?.page || 1;
+    const pageSize = options?.pageSize || 10;
+    const sortBy = options?.sortBy || 'created_at';
+    const sortOrder = options?.sortOrder || 'desc';
+
+    // Build base query
     let query = supabase
       .from('announcements_with_details')
-      .select('*')
-      .eq('group_id', groupId)
-      .order('is_pinned', { ascending: false })
-      .order('created_at', { ascending: false });
+      .select('*', { count: 'exact' })
+      .eq('group_id', groupId);
 
     // Non-admins can't see archived announcements
     if (!options?.includeArchived || role !== 'admin') {
@@ -271,11 +288,30 @@ export async function getGroupAnnouncements(
         const ids = announcementIds.map((a) => a.announcement_id);
         query = query.in('id', ids);
       } else {
-        return { success: true, data: [] };
+        return {
+          success: true,
+          data: {
+            data: [],
+            total: 0,
+            page,
+            pageSize,
+            totalPages: 0,
+          },
+        };
       }
     }
 
-    const { data, error } = await query;
+    // Sorting - pinned always first, then by selected field
+    query = query
+      .order('is_pinned', { ascending: false })
+      .order(sortBy, { ascending: sortOrder === 'asc' });
+
+    // Apply pagination
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    query = query.range(from, to);
+
+    const { data, error, count } = await query;
 
     if (error) throw error;
 
@@ -302,12 +338,85 @@ export async function getGroupAnnouncements(
       user_vote: voteMap[announcement.id] || null,
     }));
 
-    return { success: true, data: dataWithVotes as AnnouncementWithDetails[] };
+    const total = count || 0;
+    const totalPages = Math.ceil(total / pageSize);
+
+    return {
+      success: true,
+      data: {
+        data: dataWithVotes as AnnouncementWithDetails[],
+        total,
+        page,
+        pageSize,
+        totalPages,
+      },
+    };
   } catch (error) {
     console.error('Failed to get announcements:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to fetch announcements',
+    };
+  }
+}
+
+// ============================================================================
+// GET PINNED ANNOUNCEMENTS (All Members)
+// ============================================================================
+
+/**
+ * Get all pinned announcements for a group (not paginated)
+ */
+export async function getPinnedAnnouncements(
+  groupId: string
+): Promise<ActionResponse<AnnouncementWithDetails[]>> {
+  try {
+    await requireAuth();
+
+    // Verify user is a member
+    const { isMember } = await getUserGroupRole(groupId);
+    if (!isMember) {
+      throw new Error('You are not a member of this group');
+    }
+
+    const supabase = await createClient();
+    const user = await requireAuth();
+
+    // Get pinned announcements
+    const { data, error } = await supabase
+      .from('announcements_with_details')
+      .select('*')
+      .eq('group_id', groupId)
+      .eq('is_pinned', true)
+      .eq('is_archived', false)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    // Fetch user's votes for these announcements
+    const announcementIds = data?.map(a => a.id) || [];
+    const { data: votes } = await supabase
+      .from('votes')
+      .select('announcement_id, vote_type')
+      .eq('user_id', user.id)
+      .in('announcement_id', announcementIds);
+
+    const voteMap = votes?.reduce((acc, vote) => {
+      acc[vote.announcement_id] = vote.vote_type;
+      return acc;
+    }, {} as Record<string, string>) || {};
+
+    const dataWithVotes = data?.map(announcement => ({
+      ...announcement,
+      user_vote: voteMap[announcement.id] || null,
+    }));
+
+    return { success: true, data: dataWithVotes as AnnouncementWithDetails[] };
+  } catch (error) {
+    console.error('Failed to get pinned announcements:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch pinned announcements',
     };
   }
 }
@@ -458,6 +567,62 @@ export async function voteAnnouncement(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to vote',
+    };
+  }
+}
+
+// ============================================================================
+// PIN/UNPIN ANNOUNCEMENT (Admin & Contributor)
+// ============================================================================
+
+/**
+ * Toggle pin status of an announcement
+ * Admins and contributors can pin/unpin announcements
+ */
+export async function togglePinAnnouncement(
+  announcementId: string
+): Promise<ActionResponse<void>> {
+  try {
+    const user = await requireAuth();
+    const supabase = await createClient();
+
+    // Get announcement to check group and current pin status
+    const { data: announcement, error: fetchError } = await supabase
+      .from('announcements')
+      .select('group_id, is_pinned')
+      .eq('id', announcementId)
+      .single();
+
+    if (fetchError || !announcement) {
+      return { success: false, error: 'Announcement not found' };
+    }
+
+    // Verify user is admin or contributor of the group
+    await requireGroupRole(
+      announcement.group_id,
+      ['admin', 'contributor'],
+      'Only admins and contributors can pin announcements'
+    );
+
+    // Toggle pin status
+    const { error: updateError } = await supabase
+      .from('announcements')
+      .update({
+        is_pinned: !announcement.is_pinned,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', announcementId);
+
+    if (updateError) throw updateError;
+
+    revalidatePath(`/groups/${announcement.group_id}`);
+
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error('Failed to toggle pin:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to toggle pin',
     };
   }
 }

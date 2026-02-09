@@ -134,7 +134,7 @@ export default function SystemAdminDashboardPage() {
           {isReady && <SystemAdminDashboard />}
 
           {/* Pending Groups Manager - lazy load after admin check */}
-          {isReady && <PendingGroupsManager />}
+          {isReady && <PendingGroupsManager onGroupChange={fetchGroups} />}
 
           {/* All Groups */}
           <Card>

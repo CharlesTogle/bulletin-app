@@ -4,12 +4,13 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { getGroup, getGroupMembers, updateMemberRole } from '@/actions/groups';
-import { getGroupAnnouncements } from '@/actions/announcements';
+import { getGroupAnnouncements, getPinnedAnnouncements, togglePinAnnouncement } from '@/actions/announcements';
 import { getUserGroupRole } from '@/lib/auth/permissions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Pagination } from '@/components/ui/pagination';
 import {
   ArrowLeft,
   Users,
@@ -26,7 +27,8 @@ import {
   MessageSquare,
   ChevronDown,
   Pencil,
-  User
+  User,
+  Calendar
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -47,13 +49,29 @@ export default function GroupPage() {
   const [group, setGroup] = useState<any>(null);
   const [error, setError] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  // Announcements state
+  const [pinnedAnnouncements, setPinnedAnnouncements] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [announcementsLoading, setAnnouncementsLoading] = useState(false);
-  const [userRole, setUserRole] = useState<'admin' | 'contributor' | 'member' | null>(null);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [announcementPage, setAnnouncementPage] = useState(1);
+  const [announcementTotal, setAnnouncementTotal] = useState(0);
+  const [announcementTotalPages, setAnnouncementTotalPages] = useState(0);
+  const [announcementSort, setAnnouncementSort] = useState<'created_at' | 'deadline'>('created_at');
+  const [announcementSortOrder, setAnnouncementSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Members state
   const [members, setMembers] = useState<any[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
+  const [memberPage, setMemberPage] = useState(1);
+  const [memberTotal, setMemberTotal] = useState(0);
+  const [memberTotalPages, setMemberTotalPages] = useState(0);
+  const [memberSort, setMemberSort] = useState<'joined_at' | 'email' | 'role'>('joined_at');
+  const [memberSortOrder, setMemberSortOrder] = useState<'asc' | 'desc'>('asc');
   const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
+
+  // Other state
+  const [userRole, setUserRole] = useState<'admin' | 'contributor' | 'member' | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Get current user ID
@@ -72,16 +90,31 @@ export default function GroupPage() {
 
     setAnnouncementsLoading(true);
     try {
-      const result = await getGroupAnnouncements(groupId);
+      // Fetch pinned announcements separately (always visible)
+      const pinnedResult = await getPinnedAnnouncements(groupId);
+      if (pinnedResult.success) {
+        setPinnedAnnouncements(pinnedResult.data || []);
+      }
+
+      // Fetch paginated announcements
+      const result = await getGroupAnnouncements(groupId, {
+        page: announcementPage,
+        pageSize: 10,
+        sortBy: announcementSort,
+        sortOrder: announcementSortOrder,
+      });
+
       if (result.success) {
-        setAnnouncements(result.data || []);
+        setAnnouncements(result.data.data || []);
+        setAnnouncementTotal(result.data.total);
+        setAnnouncementTotalPages(result.data.totalPages);
       }
     } catch (err) {
       console.error('Failed to fetch announcements:', err);
     } finally {
       setAnnouncementsLoading(false);
     }
-  }, [groupId, group?.approved]);
+  }, [groupId, group?.approved, announcementPage, announcementSort, announcementSortOrder]);
 
   const fetchUserRole = useCallback(async () => {
     if (!group?.approved) return;
@@ -102,10 +135,17 @@ export default function GroupPage() {
 
     setMembersLoading(true);
     try {
-      const result = await getGroupMembers(groupId);
+      const result = await getGroupMembers(groupId, {
+        page: memberPage,
+        pageSize: 20,
+        sortBy: memberSort,
+        sortOrder: memberSortOrder,
+      });
+
       if (result.success) {
-        setMembers(result.data || []);
-        console.log('Members loaded:', result.data);
+        setMembers(result.data.data || []);
+        setMemberTotal(result.data.total);
+        setMemberTotalPages(result.data.totalPages);
       } else {
         console.error('Failed to fetch members:', result.error);
       }
@@ -114,7 +154,7 @@ export default function GroupPage() {
     } finally {
       setMembersLoading(false);
     }
-  }, [groupId, group?.approved]);
+  }, [groupId, group?.approved, memberPage, memberSort, memberSortOrder]);
 
   useEffect(() => {
     async function fetchGroup() {
@@ -161,6 +201,18 @@ export default function GroupPage() {
       alert('Failed to update role');
     } finally {
       setUpdatingMemberId(null);
+    }
+  }
+
+  async function handlePinAnnouncement(announcementId: string) {
+    try {
+      const result = await togglePinAnnouncement(announcementId);
+      if (!result.success) {
+        alert(result.error || 'Failed to pin/unpin announcement');
+      }
+    } catch (err) {
+      console.error('Failed to pin/unpin announcement:', err);
+      alert('Failed to pin/unpin announcement');
     }
   }
 
@@ -327,6 +379,14 @@ export default function GroupPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push(`/groups/${groupId}/calendar`)}
+              >
+                <Calendar className="h-4 w-4 mr-2" />
+                Calendar
+              </Button>
               <Button variant="outline" size="sm">
                 <Settings className="h-4 w-4 mr-2" />
                 Settings
@@ -421,76 +481,114 @@ export default function GroupPage() {
                     <p>No members yet</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    {members.map((member) => (
-                      <div
-                        key={member.id}
-                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <div className="flex items-center justify-center h-10 w-10 rounded-full bg-primary/10 flex-shrink-0">
-                            <User className="h-5 w-5 text-primary" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">{member.email}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Badge
-                                variant="outline"
-                                className={
-                                  member.role === 'admin'
-                                    ? 'border-primary text-primary'
+                  <>
+                    <div className="space-y-2">
+                      {members.map((member) => (
+                        <div
+                          key={member.id}
+                          className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className="flex items-center justify-center h-10 w-10 rounded-full bg-primary/10 flex-shrink-0">
+                              <User className="h-5 w-5 text-primary" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium truncate">{member.email}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    member.role === 'admin'
+                                      ? 'border-primary text-primary'
+                                      : member.role === 'contributor'
+                                      ? 'border-blue-600 text-blue-600'
+                                      : 'border-muted-foreground text-muted-foreground'
+                                  }
+                                >
+                                  {member.role === 'admin'
+                                    ? 'Admin'
                                     : member.role === 'contributor'
-                                    ? 'border-blue-600 text-blue-600'
-                                    : 'border-muted-foreground text-muted-foreground'
-                                }
-                              >
-                                {member.role === 'admin'
-                                  ? 'Admin'
-                                  : member.role === 'contributor'
-                                  ? 'Contributor'
-                                  : 'Member'}
-                              </Badge>
-                              <span className="text-xs text-muted-foreground">
-                                Joined {new Date(member.joined_at).toLocaleDateString()}
-                              </span>
+                                    ? 'Contributor'
+                                    : 'Member'}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  Joined {new Date(member.joined_at).toLocaleDateString()}
+                                </span>
+                              </div>
                             </div>
                           </div>
+                          <div className="flex items-center gap-2">
+                            {updatingMemberId === member.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                            ) : member.user_id === currentUserId ? (
+                              <span className="text-xs text-muted-foreground px-3">You</span>
+                            ) : (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm">
+                                    <Settings className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => handleRoleChange(member.id, 'contributor')}
+                                    disabled={member.role === 'contributor'}
+                                  >
+                                    <Pencil className="h-4 w-4 mr-2" />
+                                    Make Contributor
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => handleRoleChange(member.id, 'member')}
+                                    disabled={member.role === 'member'}
+                                  >
+                                    <User className="h-4 w-4 mr-2" />
+                                    Make Member
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {updatingMemberId === member.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                          ) : member.user_id === currentUserId ? (
-                            <span className="text-xs text-muted-foreground px-3">You</span>
-                          ) : (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm">
-                                  <Settings className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  onClick={() => handleRoleChange(member.id, 'contributor')}
-                                  disabled={member.role === 'contributor'}
-                                >
-                                  <Pencil className="h-4 w-4 mr-2" />
-                                  Make Contributor
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => handleRoleChange(member.id, 'member')}
-                                  disabled={member.role === 'member'}
-                                >
-                                  <User className="h-4 w-4 mr-2" />
-                                  Make Member
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+
+                    {/* Members Pagination */}
+                    <Pagination
+                      currentPage={memberPage}
+                      totalPages={memberTotalPages}
+                      onPageChange={setMemberPage}
+                      total={memberTotal}
+                    />
+                  </>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Pinned Announcements */}
+          {pinnedAnnouncements.length > 0 && (
+            <Card className="border-primary/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Pin className="h-5 w-5 text-primary fill-current" />
+                  Pinned Announcements
+                </CardTitle>
+                <CardDescription>
+                  Important announcements that stay at the top
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {pinnedAnnouncements.map((announcement) => (
+                    <AnnouncementCard
+                      key={announcement.id}
+                      announcement={announcement}
+                      userRole={userRole}
+                      onRefresh={fetchAnnouncements}
+                      onPin={userRole && ['admin', 'contributor'].includes(userRole) ? handlePinAnnouncement : undefined}
+                    />
+                  ))}
+                </div>
               </CardContent>
             </Card>
           )}
@@ -502,7 +600,7 @@ export default function GroupPage() {
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     <MessageSquare className="h-5 w-5" />
-                    Announcements
+                    All Announcements
                   </CardTitle>
                   <CardDescription>
                     {userRole === 'member'
@@ -534,16 +632,27 @@ export default function GroupPage() {
                   )}
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {announcements.map((announcement) => (
-                    <AnnouncementCard
-                      key={announcement.id}
-                      announcement={announcement}
-                      userRole={userRole}
-                      onRefresh={fetchAnnouncements}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="space-y-4">
+                    {announcements.map((announcement) => (
+                      <AnnouncementCard
+                        key={announcement.id}
+                        announcement={announcement}
+                        userRole={userRole}
+                        onRefresh={fetchAnnouncements}
+                        onPin={userRole && ['admin', 'contributor'].includes(userRole) ? handlePinAnnouncement : undefined}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Pagination */}
+                  <Pagination
+                    currentPage={announcementPage}
+                    totalPages={announcementTotalPages}
+                    onPageChange={setAnnouncementPage}
+                    total={announcementTotal}
+                  />
+                </>
               )}
             </CardContent>
           </Card>
