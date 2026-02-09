@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Users, Plus, Settings, Shield, AlertCircle, Loader2 } from 'lucide-react';
+import { Users, Plus, Shield, AlertCircle, Loader2 } from 'lucide-react';
 import { CreateGroupDialog } from '@/components/dialogs/CreateGroupDialog';
 import { JoinGroupDialog } from '@/components/dialogs/JoinGroupDialog';
 
@@ -288,28 +288,19 @@ export default function DashboardPage() {
                           </p>
                         )}
                         <div className="flex gap-4 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Users className="h-3 w-3" />
-                            {group.member_count} members
-                          </span>
                           {adminStatus?.isSystemAdmin && (
                             <>
-                              <span>•</span>
                               <span>
                                 {(group as any).announcement_count || 0} announcements
                               </span>
+                              <span>•</span>
                             </>
                           )}
-                          <span>•</span>
                           <span>
                             Created {new Date(group.created_at).toLocaleDateString()}
                           </span>
                         </div>
                       </div>
-
-                      <Button variant="ghost" size="sm">
-                        <Settings className="h-4 w-4" />
-                      </Button>
                     </div>
                   ))}
                 </div>

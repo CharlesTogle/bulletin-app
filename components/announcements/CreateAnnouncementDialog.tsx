@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { TimePicker } from '@/components/ui/time-picker';
 import { Loader2, AlertCircle, Image as ImageIcon, X } from 'lucide-react';
 
 interface CreateAnnouncementDialogProps {
@@ -33,7 +34,8 @@ export function CreateAnnouncementDialog({
 }: CreateAnnouncementDialogProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [deadline, setDeadline] = useState('');
+  const [deadlineDate, setDeadlineDate] = useState('');
+  const [deadlineTime, setDeadlineTime] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -129,11 +131,22 @@ export function CreateAnnouncementDialog({
         imageUrl = await uploadImage() || undefined;
       }
 
+      // Combine date and time into datetime string if both are provided
+      let deadline: string | undefined = undefined;
+      if (deadlineDate) {
+        if (deadlineTime) {
+          deadline = `${deadlineDate}T${deadlineTime}`;
+        } else {
+          // If only date is provided, default to 23:59
+          deadline = `${deadlineDate}T23:59`;
+        }
+      }
+
       const result = await createAnnouncement({
         groupId,
         title: title.trim(),
         content: content.trim(),
-        deadline: deadline || undefined,
+        deadline,
         imageUrl,
       });
 
@@ -145,7 +158,8 @@ export function CreateAnnouncementDialog({
       // Success - reset form and close
       setTitle('');
       setContent('');
-      setDeadline('');
+      setDeadlineDate('');
+      setDeadlineTime('');
       removeImage();
       onOpenChange(false);
       onSuccess();
@@ -205,17 +219,44 @@ export function CreateAnnouncementDialog({
             </div>
 
             {/* Deadline (Optional) */}
-            <div className="space-y-2">
-              <Label htmlFor="deadline">Deadline (Optional)</Label>
-              <Input
-                id="deadline"
-                type="datetime-local"
-                value={deadline}
-                onChange={(e) => setDeadline(e.target.value)}
-                disabled={loading}
-              />
+            <div className="space-y-3">
+              <Label>Deadline (Optional)</Label>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {/* Date */}
+                <div>
+                  <Label htmlFor="deadlineDate" className="text-xs text-muted-foreground">
+                    Date
+                  </Label>
+                  <Input
+                    id="deadlineDate"
+                    type="date"
+                    value={deadlineDate}
+                    onChange={(e) => setDeadlineDate(e.target.value)}
+                    disabled={loading}
+                    className="mt-1"
+                  />
+                </div>
+
+                {/* Time */}
+                <div>
+                  <Label htmlFor="deadlineTime" className="text-xs text-muted-foreground">
+                    Time
+                  </Label>
+                  <div className="mt-1">
+                    <TimePicker
+                      value={deadlineTime}
+                      onChange={setDeadlineTime}
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+              </div>
+
               <p className="text-xs text-muted-foreground">
-                Set a deadline for time-sensitive announcements
+                {deadlineDate && !deadlineTime
+                  ? 'No time specified - will default to 11:59 PM'
+                  : 'Set a deadline for time-sensitive announcements'}
               </p>
             </div>
 
