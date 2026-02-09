@@ -483,14 +483,26 @@ export async function checkUserGroupApprovalStatus(): Promise<
  * Get all members of a group
  */
 export async function getGroupMembers(
-  groupId: string
-): Promise<ActionResponse<Array<{
-  id: string;
-  user_id: string;
-  role: 'admin' | 'contributor' | 'member';
-  joined_at: string;
-  email: string;
-}>>> {
+  groupId: string,
+  options?: {
+    page?: number;
+    pageSize?: number;
+    sortBy?: 'joined_at' | 'email' | 'role';
+    sortOrder?: 'asc' | 'desc';
+  }
+): Promise<ActionResponse<{
+  data: Array<{
+    id: string;
+    user_id: string;
+    role: 'admin' | 'contributor' | 'member';
+    joined_at: string;
+    email: string;
+  }>;
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}>> {
   try {
     const user = await requireAuth();
     const supabase = await createClient();
@@ -507,17 +519,34 @@ export async function getGroupMembers(
       return { success: false, error: 'You are not a member of this group' };
     }
 
-    // Get all members with their email from auth.users
-    const { data: members, error } = await supabase
+    // Pagination defaults
+    const page = options?.page || 1;
+    const pageSize = options?.pageSize || 20;
+    const sortBy = options?.sortBy || 'joined_at';
+    const sortOrder = options?.sortOrder || 'asc';
+
+    // Get all members with count for pagination
+    let query = supabase
       .from('group_members')
       .select(`
         id,
         user_id,
         role,
         joined_at
-      `)
-      .eq('group_id', groupId)
-      .order('joined_at', { ascending: true });
+      `, { count: 'exact' })
+      .eq('group_id', groupId);
+
+    // Apply sorting (email sorting will be done in-memory after fetching emails)
+    if (sortBy !== 'email') {
+      query = query.order(sortBy, { ascending: sortOrder === 'asc' });
+    }
+
+    // Apply pagination
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    query = query.range(from, to);
+
+    const { data: members, error, count } = await query;
 
     if (error) throw error;
 
@@ -530,12 +559,35 @@ export async function getGroupMembers(
       return acc;
     }, {} as Record<string, string>) || {};
 
-    const membersWithEmails = members?.map(m => ({
+    let membersWithEmails = members?.map(m => ({
       ...m,
       email: userMap[m.user_id] || 'Unknown',
-    }));
+    })) || [];
 
-    return { success: true, data: membersWithEmails || [] };
+    // Sort by email if requested (in-memory)
+    if (sortBy === 'email') {
+      membersWithEmails.sort((a, b) => {
+        if (sortOrder === 'asc') {
+          return a.email.localeCompare(b.email);
+        } else {
+          return b.email.localeCompare(a.email);
+        }
+      });
+    }
+
+    const total = count || 0;
+    const totalPages = Math.ceil(total / pageSize);
+
+    return {
+      success: true,
+      data: {
+        data: membersWithEmails,
+        total,
+        page,
+        pageSize,
+        totalPages,
+      },
+    };
   } catch (error) {
     console.error('Failed to get group members:', error);
     return {
@@ -584,24 +636,6 @@ export async function updateMemberRole(
         success: false,
         error: 'You cannot change your own role',
       };
-    }
-
-    // Note: The check below is now redundant since users can't change their own role,
-    // but keeping it as a safeguard
-    // Prevent admin from demoting themselves if they're the only admin
-    if (targetMember?.user_id === user.id && newRole !== 'admin') {
-      const { data: adminCount } = await supabase
-        .from('group_members')
-        .select('id', { count: 'exact', head: true })
-        .eq('group_id', groupId)
-        .eq('role', 'admin');
-
-      if (adminCount && (adminCount as any).count <= 1) {
-        return {
-          success: false,
-          error: 'Cannot demote yourself - group must have at least one admin',
-        };
-      }
     }
 
     // Update the role
