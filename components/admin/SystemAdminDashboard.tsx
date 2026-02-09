@@ -79,17 +79,17 @@ export function SystemAdminDashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold">System Admin Dashboard</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl sm:text-3xl font-bold">Statistics</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">
           Platform-wide statistics and analytics
         </p>
       </div>
 
       {/* Statistics Overview */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-3">
         <StatCard
           title="Total Groups"
           value={stats?.total_groups || 0}
@@ -125,8 +125,8 @@ export function SystemAdminDashboard() {
       {/* Top Active Groups */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
+          <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+            <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5" />
             Top Active Groups
           </CardTitle>
         </CardHeader>
@@ -134,26 +134,29 @@ export function SystemAdminDashboard() {
           {groupsLoading ? (
             <div className="text-sm text-muted-foreground">Loading...</div>
           ) : topGroups && topGroups.length > 0 ? (
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {topGroups.slice(0, 10).map((group) => (
                 <div
                   key={group.id}
-                  className="flex items-center justify-between py-2 border-b last:border-0"
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2 border-b last:border-0"
                 >
-                  <div>
-                    <div className="font-medium">{group.name}</div>
-                    <div className="text-sm text-muted-foreground">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-sm sm:text-base truncate">{group.name}</div>
+                    <div className="text-xs sm:text-sm text-muted-foreground">
                       Code: {group.code}
                     </div>
                   </div>
-                  <div className="flex gap-4 text-sm">
-                    <Badge variant="outline">
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2 text-xs sm:text-sm">
+                    <Badge variant="outline" className="text-xs">
                       {group.member_count} members
                     </Badge>
-                    <Badge variant="outline">
+                    <Badge variant="outline" className="text-xs hidden sm:inline-flex">
                       {group.announcement_count} announcements
                     </Badge>
-                    <Badge variant="outline">
+                    <Badge variant="outline" className="text-xs sm:hidden">
+                      {group.announcement_count} posts
+                    </Badge>
+                    <Badge variant="outline" className="text-xs">
                       {group.vote_count} votes
                     </Badge>
                   </div>
@@ -169,7 +172,7 @@ export function SystemAdminDashboard() {
       </Card>
 
       {/* Timeline Charts - Placeholder for actual chart implementation */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Groups Created (Last 30 Days)</CardTitle>
@@ -207,12 +210,12 @@ interface StatCardProps {
 function StatCard({ title, value, icon }: StatCardProps) {
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 sm:p-6">
+        <CardTitle className="text-xs sm:text-sm font-medium">{title}</CardTitle>
         <div className="text-muted-foreground">{icon}</div>
       </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value.toLocaleString()}</div>
+      <CardContent className="p-3 sm:p-6 pt-0 sm:pt-0">
+        <div className="text-xl sm:text-2xl font-bold">{value.toLocaleString()}</div>
       </CardContent>
     </Card>
   );

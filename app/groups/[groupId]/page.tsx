@@ -144,7 +144,7 @@ export default function GroupPage() {
     try {
       const result = await getGroupMembers(groupId, {
         page: memberPage,
-        pageSize: 20,
+        pageSize: 4,
         sortBy: memberSort,
         sortOrder: memberSortOrder,
       });
@@ -347,58 +347,62 @@ export default function GroupPage() {
       {/* Header */}
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            {/* Left side - Back button and title */}
+            <div className="flex items-start gap-2 md:gap-4 min-w-0 flex-1">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => router.push('/dashboard')}
+                className="flex-shrink-0"
               >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
+                <ArrowLeft className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Back</span>
               </Button>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h1 className="text-2xl font-bold">{group.name}</h1>
-                  <Badge className="bg-green-600 text-white">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <h1 className="text-lg sm:text-xl md:text-2xl font-bold truncate">{group.name}</h1>
+                  <Badge className="bg-green-600 text-white flex-shrink-0 text-xs">
                     Approved
                   </Badge>
                   {userRole && (
                     <Badge
                       variant="outline"
-                      className={
+                      className={`flex-shrink-0 text-xs ${
                         userRole === 'admin'
                           ? 'border-primary text-primary'
                           : userRole === 'contributor'
                           ? 'border-blue-600 text-blue-600'
                           : 'border-muted-foreground text-muted-foreground'
-                      }
+                      }`}
                     >
                       {userRole === 'admin' ? 'Admin' : userRole === 'contributor' ? 'Contributor' : 'Member'}
                     </Badge>
                   )}
                 </div>
                 {group.description && (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">
                     {group.description}
                   </p>
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+
+            {/* Right side - Action buttons */}
+            <div className="flex items-center gap-2 self-end md:self-auto">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => router.push(`/groups/${groupId}/calendar`)}
               >
-                <Calendar className="h-4 w-4 mr-2" />
-                Calendar
+                <Calendar className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Calendar</span>
               </Button>
               <Button variant="outline" size="sm">
-                <Settings className="h-4 w-4 mr-2" />
-                Settings
+                <Settings className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Settings</span>
               </Button>
-              <Button variant="ghost" onClick={handleSignOut}>
+              <Button variant="ghost" size="sm" onClick={handleSignOut} className="hidden md:flex">
                 Sign Out
               </Button>
             </div>
@@ -407,8 +411,8 @@ export default function GroupPage() {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        <div className="max-w-6xl mx-auto space-y-6">
+      <main className="container mx-auto px-4 py-4 sm:py-6 md:py-8">
+        <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6">
           {/* Group Info Card */}
           <Card>
             <CardHeader>
@@ -418,29 +422,30 @@ export default function GroupPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="flex-1">
                   <label className="text-sm font-medium text-muted-foreground">
                     Group Code
                   </label>
-                  <div className="flex items-center gap-2 mt-1">
-                    <code className="text-2xl font-mono font-bold tracking-wider">
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <code className="text-xl sm:text-2xl font-mono font-bold tracking-wider break-all">
                       {group.code}
                     </code>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={handleCopyCode}
+                      className="flex-shrink-0"
                     >
                       {copied ? (
                         <>
-                          <CheckCircle2 className="h-4 w-4 mr-1 text-green-600" />
-                          Copied!
+                          <CheckCircle2 className="h-4 w-4 sm:mr-1 text-green-600" />
+                          <span className="hidden sm:inline">Copied!</span>
                         </>
                       ) : (
                         <>
-                          <Copy className="h-4 w-4 mr-1" />
-                          Copy
+                          <Copy className="h-4 w-4 sm:mr-1" />
+                          <span className="hidden sm:inline">Copy</span>
                         </>
                       )}
                     </Button>
@@ -448,16 +453,16 @@ export default function GroupPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t">
                 <div>
                   <p className="text-sm text-muted-foreground">Created</p>
-                  <p className="font-medium">
+                  <p className="font-medium text-sm sm:text-base">
                     {new Date(group.created_at).toLocaleDateString()}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Last Updated</p>
-                  <p className="font-medium">
+                  <p className="font-medium text-sm sm:text-base">
                     {new Date(group.updated_at).toLocaleDateString()}
                   </p>
                 </div>
@@ -493,24 +498,24 @@ export default function GroupPage() {
                       {members.map((member) => (
                         <div
                           key={member.id}
-                          className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                          className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors gap-2"
                         >
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <div className="flex items-center justify-center h-10 w-10 rounded-full bg-primary/10 flex-shrink-0">
-                              <User className="h-5 w-5 text-primary" />
+                          <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                            <div className="flex items-center justify-center h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-primary/10 flex-shrink-0">
+                              <User className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-medium truncate">{member.email}</p>
-                              <div className="flex items-center gap-2 mt-1">
+                              <p className="font-medium truncate text-sm sm:text-base">{member.email}</p>
+                              <div className="flex flex-wrap items-center gap-1 sm:gap-2 mt-1">
                                 <Badge
                                   variant="outline"
-                                  className={
+                                  className={`text-xs ${
                                     member.role === 'admin'
                                       ? 'border-primary text-primary'
                                       : member.role === 'contributor'
                                       ? 'border-blue-600 text-blue-600'
                                       : 'border-muted-foreground text-muted-foreground'
-                                  }
+                                  }`}
                                 >
                                   {member.role === 'admin'
                                     ? 'Admin'
@@ -518,17 +523,17 @@ export default function GroupPage() {
                                     ? 'Contributor'
                                     : 'Member'}
                                 </Badge>
-                                <span className="text-xs text-muted-foreground">
+                                <span className="hidden sm:inline text-xs text-muted-foreground">
                                   Joined {new Date(member.joined_at).toLocaleDateString()}
                                 </span>
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-shrink-0">
                             {updatingMemberId === member.id ? (
                               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                             ) : member.user_id === currentUserId ? (
-                              <span className="text-xs text-muted-foreground px-3">You</span>
+                              <span className="text-xs text-muted-foreground px-2 sm:px-3">You</span>
                             ) : (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -593,6 +598,7 @@ export default function GroupPage() {
                       userRole={userRole}
                       onRefresh={fetchAnnouncements}
                       onPin={userRole && ['admin', 'contributor'].includes(userRole) ? handlePinAnnouncement : undefined}
+                      currentUserId={currentUserId || undefined}
                     />
                   ))}
                 </div>
@@ -603,32 +609,33 @@ export default function GroupPage() {
           {/* Announcements Section */}
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <MessageSquare className="h-5 w-5" />
-                    All Announcements
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+                    <MessageSquare className="h-5 w-5 flex-shrink-0" />
+                    <span className="truncate">All Announcements</span>
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className="text-xs sm:text-sm">
                     {userRole === 'member'
                       ? 'View and vote on announcements'
                       : 'Create and manage announcements'}
                   </CardDescription>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 self-end sm:self-auto flex-shrink-0">
                   {userRole === 'admin' && (
                     <Button
                       variant="outline"
+                      size="sm"
                       onClick={() => setTagManagementDialogOpen(true)}
                     >
-                      <Tag className="h-4 w-4 mr-2" />
-                      Manage Tags
+                      <Tag className="h-4 w-4 sm:mr-2" />
+                      <span className="hidden sm:inline">Manage Tags</span>
                     </Button>
                   )}
                   {userRole && ['admin', 'contributor'].includes(userRole) && (
-                    <Button onClick={() => setCreateDialogOpen(true)}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      New Announcement
+                    <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
+                      <Plus className="h-4 w-4 sm:mr-2" />
+                      <span className="hidden sm:inline">New Announcement</span>
                     </Button>
                   )}
                 </div>
@@ -669,6 +676,7 @@ export default function GroupPage() {
                         userRole={userRole}
                         onRefresh={fetchAnnouncements}
                         onPin={userRole && ['admin', 'contributor'].includes(userRole) ? handlePinAnnouncement : undefined}
+                        currentUserId={currentUserId || undefined}
                       />
                     ))}
                   </div>

@@ -127,12 +127,12 @@ export function PendingGroupsManager({ onGroupChange }: PendingGroupsManagerProp
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Pending Groups
+          <div className="min-w-0 flex-1">
+            <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+              <Clock className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+              <span className="truncate">Pending Groups</span>
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs sm:text-sm">
               Groups awaiting approval
             </CardDescription>
           </div>
@@ -141,6 +141,7 @@ export function PendingGroupsManager({ onGroupChange }: PendingGroupsManagerProp
             size="sm"
             onClick={() => fetchPending()}
             disabled={isLoading}
+            className="flex-shrink-0"
           >
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
@@ -152,38 +153,40 @@ export function PendingGroupsManager({ onGroupChange }: PendingGroupsManagerProp
             No pending groups
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             {pendingGroups.map((group) => (
               <div
                 key={group.id}
-                className="flex items-start justify-between p-4 border rounded-lg"
+                className="flex flex-col sm:flex-row sm:items-start sm:justify-between p-3 sm:p-4 border rounded-lg gap-3"
               >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="font-semibold">{group.name}</h3>
-                    <Badge variant="outline" className="font-mono">
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-2">
+                    <h3 className="font-semibold text-sm sm:text-base break-words">{group.name}</h3>
+                    <Badge variant="outline" className="font-mono text-xs flex-shrink-0">
                       {group.code}
                     </Badge>
                   </div>
 
                   {group.description && (
-                    <p className="text-sm text-muted-foreground mb-2">
+                    <p className="text-xs sm:text-sm text-muted-foreground mb-2 line-clamp-2">
                       {group.description}
                     </p>
                   )}
 
-                  <div className="flex gap-4 text-xs text-muted-foreground">
-                    <span>Creator: {group.creator_email}</span>
-                    <span>•</span>
-                    <span>
+                  <div className="flex flex-wrap gap-2 sm:gap-4 text-xs text-muted-foreground">
+                    <span className="truncate max-w-[200px]">
+                      Creator: {group.creator_email}
+                    </span>
+                    <span className="hidden sm:inline">•</span>
+                    <span className="hidden sm:inline">
                       Created: {new Date(group.created_at).toLocaleDateString()}
                     </span>
-                    <span>•</span>
+                    <span className="hidden sm:inline">•</span>
                     <span>{group.admin_count} admin(s)</span>
                   </div>
                 </div>
 
-                <div className="flex gap-2 ml-4">
+                <div className="flex gap-2 self-end sm:self-start sm:ml-4 flex-shrink-0">
                   <Button
                     size="sm"
                     variant={
@@ -194,12 +197,15 @@ export function PendingGroupsManager({ onGroupChange }: PendingGroupsManagerProp
                     }
                     onClick={() => handleApprove(group.id)}
                     disabled={approving || rejecting}
+                    className="text-xs sm:text-sm"
                   >
-                    <Check className="h-4 w-4 mr-1" />
-                    {confirmAction?.groupId === group.id &&
-                    confirmAction.action === 'approve'
-                      ? 'Confirm?'
-                      : 'Approve'}
+                    <Check className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                    <span className="hidden sm:inline">
+                      {confirmAction?.groupId === group.id &&
+                      confirmAction.action === 'approve'
+                        ? 'Confirm?'
+                        : 'Approve'}
+                    </span>
                   </Button>
                   <Button
                     size="sm"
@@ -211,12 +217,15 @@ export function PendingGroupsManager({ onGroupChange }: PendingGroupsManagerProp
                     }
                     onClick={() => handleReject(group.id)}
                     disabled={approving || rejecting}
+                    className="text-xs sm:text-sm"
                   >
-                    <X className="h-4 w-4 mr-1" />
-                    {confirmAction?.groupId === group.id &&
-                    confirmAction.action === 'reject'
-                      ? 'Confirm?'
-                      : 'Reject'}
+                    <X className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                    <span className="hidden sm:inline">
+                      {confirmAction?.groupId === group.id &&
+                      confirmAction.action === 'reject'
+                        ? 'Confirm?'
+                        : 'Reject'}
+                    </span>
                   </Button>
                 </div>
               </div>

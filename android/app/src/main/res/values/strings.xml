@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Bulletin</string>
+    <string name="title_activity_main">Bulletin</string>
+    <string name="package_name">com.bulletinapp.app</string>
+    <string name="custom_url_scheme">com.bulletinapp.app</string>
+</resources>

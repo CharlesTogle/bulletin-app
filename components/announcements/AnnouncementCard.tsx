@@ -4,7 +4,7 @@ import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
-import { voteAnnouncement } from '@/actions/announcements';
+import { voteAnnouncement, deleteAnnouncement } from '@/actions/announcements';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,14 +14,23 @@ import {
   Pin,
   Calendar,
   User,
-  Loader2
+  Loader2,
+  Trash2,
+  MoreVertical
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface AnnouncementCardProps {
   announcement: any;
   userRole: 'admin' | 'contributor' | 'member' | null;
   onRefresh: () => void;
   onPin?: (announcementId: string) => Promise<void>;
+  currentUserId?: string;
 }
 
 export function AnnouncementCard({
@@ -29,9 +38,11 @@ export function AnnouncementCard({
   userRole,
   onRefresh,
   onPin,
+  currentUserId,
 }: AnnouncementCardProps) {
   const [voting, setVoting] = useState(false);
   const [pinning, setPinning] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   async function handleVote(voteType: 'upvote' | 'downvote') {
     setVoting(true);
@@ -63,24 +74,49 @@ export function AnnouncementCard({
     }
   }
 
+  async function handleDelete() {
+    if (!confirm('Are you sure you want to delete this announcement? This action cannot be undone.')) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const result = await deleteAnnouncement(announcement.id);
+      if (result.success) {
+        onRefresh();
+      } else {
+        alert(result.error || 'Failed to delete announcement');
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
+      alert('Failed to delete announcement');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  // Check if user can delete this announcement
+  const isAuthor = currentUserId && announcement.author_id === currentUserId;
+  const canDelete = userRole === 'admin' || isAuthor;
+
   const userVote = announcement.user_vote;
   const netVotes = (announcement.upvotes_count || 0) - (announcement.downvotes_count || 0);
 
   return (
     <Card className={announcement.is_pinned ? 'border-primary' : ''}>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
+      <CardHeader className="pb-3 px-4 sm:px-6">
+        <div className="flex items-start justify-between gap-2 sm:gap-4">
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               {announcement.is_pinned && (
-                <Pin className="h-4 w-4 text-primary" />
+                <Pin className="h-4 w-4 text-primary flex-shrink-0" />
               )}
-              <h3 className="font-semibold text-lg">{announcement.title}</h3>
+              <h3 className="font-semibold text-base sm:text-lg break-words">{announcement.title}</h3>
             </div>
 
             {/* Tags */}
             {announcement.tags && announcement.tags.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-2">
+              <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-2">
                 {announcement.tags.map((tag: any) => (
                   <span
                     key={tag.id}
@@ -98,64 +134,77 @@ export function AnnouncementCard({
               </div>
             )}
 
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <User className="h-3 w-3" />
-                {announcement.author_email || 'Unknown'}
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-3 text-xs sm:text-sm text-muted-foreground">
+              <span className="flex items-center gap-1 truncate max-w-[150px] sm:max-w-none">
+                <User className="h-3 w-3 flex-shrink-0" />
+                <span className="truncate">{announcement.author_email || 'Unknown'}</span>
               </span>
-              <span>•</span>
-              <span>{new Date(announcement.created_at).toLocaleDateString()}</span>
+              <span className="hidden sm:inline">•</span>
+              <span className="hidden sm:inline">{new Date(announcement.created_at).toLocaleDateString()}</span>
               {announcement.deadline && (
                 <>
-                  <span>•</span>
+                  <span className="hidden sm:inline">•</span>
                   <span className="flex items-center gap-1 text-amber-600">
-                    <Calendar className="h-3 w-3" />
-                    Due: {new Date(announcement.deadline).toLocaleDateString()}
+                    <Calendar className="h-3 w-3 flex-shrink-0" />
+                    <span className="hidden sm:inline">Due: </span>
+                    {new Date(announcement.deadline).toLocaleDateString()}
                   </span>
                 </>
               )}
             </div>
           </div>
 
-          {/* Pin Button (Admin & Contributor) */}
-          {userRole && ['admin', 'contributor'].includes(userRole) && onPin && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handlePin}
-              disabled={pinning}
-            >
-              {pinning ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : announcement.is_pinned ? (
-                <>
-                  <Pin className="h-4 w-4 mr-1 fill-current" />
-                  Unpin
-                </>
-              ) : (
-                <>
-                  <Pin className="h-4 w-4 mr-1" />
-                  Pin
-                </>
-              )}
-            </Button>
+          {/* Actions Menu (Admin & Author) */}
+          {(canDelete || (userRole && ['admin', 'contributor'].includes(userRole) && onPin)) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" disabled={deleting || pinning} className="flex-shrink-0">
+                  {deleting || pinning ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <MoreVertical className="h-4 w-4" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {/* Pin/Unpin option (Admin & Contributor) */}
+                {userRole && ['admin', 'contributor'].includes(userRole) && onPin && (
+                  <DropdownMenuItem onClick={handlePin} disabled={pinning}>
+                    <Pin className={`h-4 w-4 mr-2 ${announcement.is_pinned ? 'fill-current' : ''}`} />
+                    {announcement.is_pinned ? 'Unpin' : 'Pin'}
+                  </DropdownMenuItem>
+                )}
+
+                {/* Delete option (Admin or Author) */}
+                {canDelete && (
+                  <DropdownMenuItem
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 sm:space-y-4 px-4 sm:px-6">
         {/* Image */}
         {announcement.image_url && (
           <div className="rounded-lg overflow-hidden border">
             <img
               src={announcement.image_url}
               alt={announcement.title}
-              className="w-full h-auto max-h-96 object-cover"
+              className="w-full h-auto max-h-64 sm:max-h-96 object-cover"
             />
           </div>
         )}
 
         {/* Content */}
-        <div className="prose prose-sm max-w-none dark:prose-invert">
+        <div className="prose prose-sm sm:prose max-w-none dark:prose-invert [&_pre]:border-0 [&_pre]:bg-transparent [&_pre]:p-0 [&_code]:border-0 [&_code]:bg-transparent [&_code]:p-0 [&_code]:before:content-none [&_code]:after:content-none [&_p]:break-words">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeRaw]}
@@ -174,13 +223,13 @@ export function AnnouncementCard({
         )}
 
         {/* Voting */}
-        <div className="flex items-center gap-2 pt-2 border-t">
+        <div className="flex items-center gap-1 sm:gap-2 pt-2 border-t">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => handleVote('upvote')}
             disabled={voting}
-            className="gap-1"
+            className="gap-1 px-2 sm:px-3"
           >
             {voting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -203,7 +252,7 @@ export function AnnouncementCard({
             size="sm"
             onClick={() => handleVote('downvote')}
             disabled={voting}
-            className="gap-1"
+            className="gap-1 px-2 sm:px-3"
           >
             {voting ? (
               <Loader2 className="h-4 w-4 animate-spin" />

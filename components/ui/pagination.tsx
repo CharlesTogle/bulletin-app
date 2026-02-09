@@ -63,20 +63,21 @@ export function Pagination({
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4">
       {/* Info */}
       {total !== undefined && (
-        <div className="text-sm text-muted-foreground">
+        <div className="text-xs sm:text-sm text-muted-foreground">
           Total: {total} items
         </div>
       )}
 
       {/* Page Navigation */}
-      <div className="flex items-center gap-2">
-        {/* First page */}
+      <div className="flex items-center gap-1 sm:gap-2">
+        {/* First page - Hidden on mobile */}
         <Button
           variant="outline"
           size="icon"
           onClick={() => onPageChange(1)}
           disabled={currentPage === 1}
           aria-label="First page"
+          className="hidden sm:inline-flex h-8 w-8 sm:h-9 sm:w-9"
         >
           <ChevronsLeft className="h-4 w-4" />
         </Button>
@@ -88,15 +89,16 @@ export function Pagination({
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
           aria-label="Previous page"
+          className="h-8 w-8 sm:h-9 sm:w-9"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" />
         </Button>
 
         {/* Page numbers */}
         {getPageNumbers().map((page, index) => {
           if (page === '...') {
             return (
-              <span key={`ellipsis-${index}`} className="px-2 text-muted-foreground">
+              <span key={`ellipsis-${index}`} className="px-1 sm:px-2 text-xs sm:text-sm text-muted-foreground">
                 ...
               </span>
             );
@@ -109,6 +111,7 @@ export function Pagination({
               size="icon"
               onClick={() => onPageChange(page as number)}
               aria-label={`Page ${page}`}
+              className="h-8 w-8 sm:h-9 sm:w-9 text-xs sm:text-sm"
             >
               {page}
             </Button>
@@ -122,17 +125,19 @@ export function Pagination({
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
           aria-label="Next page"
+          className="h-8 w-8 sm:h-9 sm:w-9"
         >
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
         </Button>
 
-        {/* Last page */}
+        {/* Last page - Hidden on mobile */}
         <Button
           variant="outline"
           size="icon"
           onClick={() => onPageChange(totalPages)}
           disabled={currentPage === totalPages}
           aria-label="Last page"
+          className="hidden sm:inline-flex h-8 w-8 sm:h-9 sm:w-9"
         >
           <ChevronsRight className="h-4 w-4" />
         </Button>

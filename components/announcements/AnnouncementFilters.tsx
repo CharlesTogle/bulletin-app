@@ -79,7 +79,9 @@ export function AnnouncementFilters({
             ) : (
               <SortDesc className="h-4 w-4" />
             )}
-            Sort: {filters.sortBy === 'created_at' ? 'Date Created' : 'Deadline'}
+            <span className="hidden xs:inline">Sort: </span>
+            <span className="hidden sm:inline">{filters.sortBy === 'created_at' ? 'Date Created' : 'Deadline'}</span>
+            <span className="sm:hidden">{filters.sortBy === 'created_at' ? 'Date' : 'Deadline'}</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
@@ -109,15 +111,18 @@ export function AnnouncementFilters({
             <Button variant="outline" size="sm" className="gap-2">
               <Filter className="h-4 w-4" />
               {selectedTag ? (
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1 max-w-[120px] sm:max-w-none">
                   <span
-                    className="w-2 h-2 rounded-full"
+                    className="w-2 h-2 rounded-full flex-shrink-0"
                     style={{ backgroundColor: selectedTag.color }}
                   />
-                  {selectedTag.title}
+                  <span className="truncate">{selectedTag.title}</span>
                 </span>
               ) : (
-                'Filter by Tag'
+                <>
+                  <span className="hidden sm:inline">Filter by Tag</span>
+                  <span className="sm:hidden">Tag</span>
+                </>
               )}
             </Button>
           </DropdownMenuTrigger>

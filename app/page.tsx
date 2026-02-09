@@ -221,11 +221,10 @@ export default function LandingPage() {
       <section className="py-20">
         <div className="mx-auto max-w-3xl px-4 text-center sm:px-6 lg:px-8">
           <h2 className="mb-4 text-3xl font-bold">
-            Ready to simplify your team communication?
+            Ready to get started?
           </h2>
           <p className="mb-8 text-lg text-muted-foreground">
-            Join teams that have ditched email chains and endless Slack threads
-            for something better.
+            Create your group bulletin board in seconds. Free to use, no credit card required.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Button size="lg" asChild>
@@ -234,9 +233,6 @@ export default function LandingPage() {
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
-            <Button size="lg" variant="outline" asChild>
-              <Link href="/pricing">View Pricing</Link>
-            </Button>
           </div>
         </div>
       </section>
@@ -244,82 +240,36 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="border-t">
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-          <div className="grid gap-8 md:grid-cols-4">
-            <div>
-              <div className="mb-4 flex items-center gap-2">
-                <Pin className="h-5 w-5 rotate-45" />
-                <span className="font-bold">Bulletin</span>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Pin what matters.
-                <br />
-                Share with everyone.
-              </p>
+          <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
+            {/* Brand */}
+            <div className="flex items-center gap-2">
+              <Pin className="h-5 w-5 rotate-45" />
+              <span className="font-bold">Bulletin</span>
+              <span className="text-sm text-muted-foreground">
+                • Pin what matters
+              </span>
             </div>
 
-            <div>
-              <h3 className="mb-4 font-semibold">Product</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>
-                  <Link href="/features" className="hover:text-foreground">
-                    Features
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/pricing" className="hover:text-foreground">
-                    Pricing
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/demo" className="hover:text-foreground">
-                    Demo
-                  </Link>
-                </li>
-              </ul>
+            {/* Links */}
+            <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
+              <Link href="/signup" className="hover:text-foreground">
+                Get Started
+              </Link>
+              <Link href="/login" className="hover:text-foreground">
+                Sign In
+              </Link>
+              <Link href="/privacy" className="hover:text-foreground">
+                Privacy
+              </Link>
+              <Link href="/terms" className="hover:text-foreground">
+                Terms
+              </Link>
             </div>
 
-            <div>
-              <h3 className="mb-4 font-semibold">Company</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>
-                  <Link href="/about" className="hover:text-foreground">
-                    About
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/blog" className="hover:text-foreground">
-                    Blog
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/contact" className="hover:text-foreground">
-                    Contact
-                  </Link>
-                </li>
-              </ul>
+            {/* Copyright */}
+            <div className="text-sm text-muted-foreground">
+              © {new Date().getFullYear()} Bulletin
             </div>
-
-            <div>
-              <h3 className="mb-4 font-semibold">Legal</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>
-                  <Link href="/privacy" className="hover:text-foreground">
-                    Privacy
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/terms" className="hover:text-foreground">
-                    Terms
-                  </Link>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <Separator className="my-8" />
-
-          <div className="text-center text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Bulletin. All rights reserved.
           </div>
         </div>
       </footer>
