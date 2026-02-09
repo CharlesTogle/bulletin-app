@@ -28,7 +28,8 @@ import {
   ChevronDown,
   Pencil,
   User,
-  Calendar
+  Calendar,
+  Tag
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -38,6 +39,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { AnnouncementCard } from '@/components/announcements/AnnouncementCard';
 import { CreateAnnouncementDialog } from '@/components/announcements/CreateAnnouncementDialog';
+import { AnnouncementFilters, AnnouncementFilterState } from '@/components/announcements/AnnouncementFilters';
+import { TagManagementDialog } from '@/components/tags/TagManagementDialog';
 
 export default function GroupPage() {
   const router = useRouter();
@@ -56,8 +59,10 @@ export default function GroupPage() {
   const [announcementPage, setAnnouncementPage] = useState(1);
   const [announcementTotal, setAnnouncementTotal] = useState(0);
   const [announcementTotalPages, setAnnouncementTotalPages] = useState(0);
-  const [announcementSort, setAnnouncementSort] = useState<'created_at' | 'deadline'>('created_at');
-  const [announcementSortOrder, setAnnouncementSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [announcementFilters, setAnnouncementFilters] = useState<AnnouncementFilterState>({
+    sortBy: 'created_at',
+    sortOrder: 'desc',
+  });
 
   // Members state
   const [members, setMembers] = useState<any[]>([]);
@@ -72,6 +77,7 @@ export default function GroupPage() {
   // Other state
   const [userRole, setUserRole] = useState<'admin' | 'contributor' | 'member' | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [tagManagementDialogOpen, setTagManagementDialogOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Get current user ID
@@ -100,8 +106,9 @@ export default function GroupPage() {
       const result = await getGroupAnnouncements(groupId, {
         page: announcementPage,
         pageSize: 10,
-        sortBy: announcementSort,
-        sortOrder: announcementSortOrder,
+        sortBy: announcementFilters.sortBy,
+        sortOrder: announcementFilters.sortOrder,
+        tagId: announcementFilters.tagId,
       });
 
       if (result.success) {
@@ -114,7 +121,7 @@ export default function GroupPage() {
     } finally {
       setAnnouncementsLoading(false);
     }
-  }, [groupId, group?.approved, announcementPage, announcementSort, announcementSortOrder]);
+  }, [groupId, group?.approved, announcementPage, announcementFilters]);
 
   const fetchUserRole = useCallback(async () => {
     if (!group?.approved) return;
@@ -596,7 +603,7 @@ export default function GroupPage() {
           {/* Announcements Section */}
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-4">
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     <MessageSquare className="h-5 w-5" />
@@ -608,13 +615,34 @@ export default function GroupPage() {
                       : 'Create and manage announcements'}
                   </CardDescription>
                 </div>
-                {userRole && ['admin', 'contributor'].includes(userRole) && (
-                  <Button onClick={() => setCreateDialogOpen(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Announcement
-                  </Button>
-                )}
+                <div className="flex gap-2">
+                  {userRole === 'admin' && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setTagManagementDialogOpen(true)}
+                    >
+                      <Tag className="h-4 w-4 mr-2" />
+                      Manage Tags
+                    </Button>
+                  )}
+                  {userRole && ['admin', 'contributor'].includes(userRole) && (
+                    <Button onClick={() => setCreateDialogOpen(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      New Announcement
+                    </Button>
+                  )}
+                </div>
               </div>
+
+              {/* Filters */}
+              <AnnouncementFilters
+                groupId={groupId}
+                filters={announcementFilters}
+                onFiltersChange={(newFilters) => {
+                  setAnnouncementFilters(newFilters);
+                  setAnnouncementPage(1); // Reset to page 1 when filters change
+                }}
+              />
             </CardHeader>
             <CardContent>
               {announcementsLoading ? (
@@ -665,6 +693,13 @@ export default function GroupPage() {
         onOpenChange={setCreateDialogOpen}
         groupId={groupId}
         onSuccess={fetchAnnouncements}
+      />
+
+      {/* Tag Management Dialog */}
+      <TagManagementDialog
+        open={tagManagementDialogOpen}
+        onOpenChange={setTagManagementDialogOpen}
+        groupId={groupId}
       />
     </div>
   );
