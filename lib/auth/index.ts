@@ -9,7 +9,7 @@ import { redirect } from 'next/navigation';
  * Returns null if not authenticated
  */
 export async function getCurrentUser() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -4,6 +4,13 @@ SQL migrations for the Bulletin App database schema.
 
 ## Migration Files
 
+### Migration Order
+
+Run migrations in this order:
+1. `001_create_groups.sql` - Groups and membership system
+2. `002_create_announcements_system.sql` - Announcements, votes, attachments (Not yet run)
+3. `003_create_system_admin.sql` - System admin role and statistics (Not yet run)
+
 ### `001_create_groups.sql`
 
 **Creates the groups system with the following tables:**
@@ -23,7 +30,10 @@ SQL migrations for the Bulletin App database schema.
    - `id` (UUID, PK) - Unique membership identifier
    - `group_id` (UUID, FK → groups) - Group reference
    - `user_id` (UUID, FK → auth.users) - User reference
-   - `role` (TEXT) - Member role: `admin`, `moderator`, or `member`
+   - `role` (TEXT) - Member role: `admin`, `contributor`, or `member`
+     - **admin**: Full control over group
+     - **contributor**: Can create announcements
+     - **member**: Can view, upvote, and downvote announcements only
    - `joined_at` (TIMESTAMPTZ) - When user joined (UTC)
    - **Unique constraint**: One membership per user per group
 
@@ -33,7 +43,7 @@ SQL migrations for the Bulletin App database schema.
 ✅ **Auto-add Creator as Admin** - Trigger automatically adds group creator as admin
 ✅ **Updated_at Trigger** - Automatically updates `updated_at` on changes
 ✅ **Row Level Security** - Complete RLS policies for secure access
-✅ **Member Roles** - Admin, Moderator, and Member roles with different permissions
+✅ **Member Roles** - Admin, Contributor, and Member roles with different permissions
 ✅ **Stats View** - `groups_with_stats` view includes member counts
 
 #### RLS Policies
@@ -48,7 +58,7 @@ SQL migrations for the Bulletin App database schema.
 - ✅ Members can view other members in their groups
 - ✅ Users can join groups (as member)
 - ✅ Admins can add members with any role
-- ✅ Admins/moderators can update member roles
+- ✅ Admins/contributors can update member roles
 - ✅ Users can leave groups, admins can remove members
 
 ## Running Migrations
@@ -127,7 +137,7 @@ import { updateMemberRole } from '@/actions/groups';
 const result = await updateMemberRole(
   'group-id',
   'user-id',
-  'moderator'
+  'contributor'
 );
 ```
 
@@ -257,8 +267,119 @@ After running this migration:
 └───────────────────┘
 ```
 
+### `002_create_announcements_system.sql`
+
+**Creates the complete announcements ecosystem:**
+
+#### Tables
+
+1. **`categories`** - Announcement categories
+   - Colored labels for organizing announcements
+   - Lucide icon support
+
+2. **`tags`** - Flexible tagging system
+   - For cross-category organization
+
+3. **`announcements`** - Main announcements table
+   - Rich markdown content (up to 50,000 chars)
+   - Optional deadline field
+   - Pin and archive functionality
+   - Auto-tracked upvote/downvote counts
+
+4. **`announcement_tags`** - Many-to-many tag relationships
+
+5. **`votes`** - User voting system
+   - Upvote or downvote
+   - Can change or remove vote
+   - Auto-updates announcement vote counts via trigger
+
+6. **`attachments`** - File attachments
+   - Links to Supabase Storage
+   - Supports any file type
+
+#### Storage Setup
+
+After running the migration, create a storage bucket in Supabase Dashboard:
+
+1. Go to **Storage** → **New Bucket**
+2. Bucket name: `attachments`
+3. Public: No (private bucket)
+4. Run the storage RLS policies from the migration file
+
+#### Features
+
+✅ **Markdown Support** - Rich text with GFM support
+✅ **Voting System** - Upvote/downvote with auto-count updates
+✅ **Categories & Tags** - Flexible organization
+✅ **Deadlines** - Optional due dates (UTC timestamps)
+✅ **Attachments** - File storage via Supabase Storage
+✅ **Pin/Archive** - Admin-only features
+✅ **Complete RLS** - Secure access control
+
+### `003_create_system_admin.sql`
+
+**Creates the System Admin role and statistics views:**
+
+#### Tables
+
+1. **`system_roles`** - System-wide administrative roles
+   - Currently supports `system_admin` role
+   - Tracks who granted the role and when
+
+#### Views (Statistics)
+
+1. **`system_statistics`** - Overall platform metrics
+   - Total groups, announcements, users, votes, attachments
+
+2. **`groups_created_timeline`** - Time-series data for groups
+
+3. **`announcements_created_timeline`** - Time-series data for announcements
+
+4. **`group_activity_stats`** - Detailed per-group metrics
+
+5. **`top_active_groups`** - Top 20 groups by engagement
+
+6. **`user_activity_stats`** - Per-user engagement metrics
+
+#### Features
+
+✅ **System Admin Role** - Platform-wide privileges
+✅ **Statistics Views** - Pre-aggregated analytics
+✅ **Helper Functions** - `is_system_admin()`, `auth.is_system_admin()`
+✅ **Complete RLS** - Only system admins can access statistics
+
+#### Granting the First System Admin
+
+After running the migration, grant system admin to your user:
+
+```sql
+-- Find your user ID
+SELECT id, email FROM auth.users WHERE email = 'your-email@example.com';
+
+-- Grant system admin role
+INSERT INTO system_roles (user_id, role, granted_by)
+VALUES (
+  'your-user-id-here',  -- Replace with your user ID from above
+  'system_admin',
+  NULL  -- NULL for the first admin (bootstrap)
+);
+```
+
+**Alternatively, grant by email directly:**
+
+```sql
+INSERT INTO system_roles (user_id, role, granted_by)
+SELECT id, 'system_admin', NULL
+FROM auth.users
+WHERE email = 'your-email@example.com';
+```
+
+After granting, you can use the Server Actions in `actions/system-admin.ts` to manage additional system admins from the UI.
+
 ## Resources
 
 - [Supabase RLS Documentation](https://supabase.com/docs/guides/auth/row-level-security)
 - [PostgreSQL Triggers](https://www.postgresql.org/docs/current/triggers.html)
 - [Group Actions Documentation](../../actions/groups.ts)
+- [Announcement Actions Documentation](../../actions/announcements.ts)
+- [System Admin Actions Documentation](../../actions/system-admin.ts)

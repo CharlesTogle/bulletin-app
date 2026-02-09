@@ -46,7 +46,7 @@ CREATE TABLE group_members (
 
   -- Constraints
   CONSTRAINT group_members_unique_user_group UNIQUE(group_id, user_id),
-  CONSTRAINT group_members_role_check CHECK (role IN ('admin', 'moderator', 'member'))
+  CONSTRAINT group_members_role_check CHECK (role IN ('admin', 'contributor', 'member'))
 );
 
 -- Indexes for performance
@@ -56,7 +56,7 @@ CREATE INDEX idx_group_members_role ON group_members(role);
 
 -- Add comments
 COMMENT ON TABLE group_members IS 'Junction table linking users to groups with roles';
-COMMENT ON COLUMN group_members.role IS 'Member role: admin (can manage), moderator (can moderate), member (regular user)';
+COMMENT ON COLUMN group_members.role IS 'Member role: admin (full control), contributor (can create announcements), member (can view/upvote/downvote)';
 
 -- ============================================================================
 -- 3. CREATE TRIGGER FOR UPDATED_AT
@@ -228,8 +228,8 @@ WITH CHECK (
   )
 );
 
--- Policy: Admins and moderators can update member roles (except admins can't be demoted by non-creators)
-CREATE POLICY "Admins can update member roles"
+-- Policy: Admins and contributors can update member roles (except admins can't be demoted by non-creators)
+CREATE POLICY "Admins and contributors can update member roles"
 ON group_members
 FOR UPDATE
 USING (
@@ -237,7 +237,7 @@ USING (
     SELECT 1 FROM group_members gm
     WHERE gm.group_id = group_members.group_id
     AND gm.user_id = auth.uid()
-    AND gm.role IN ('admin', 'moderator')
+    AND gm.role IN ('admin', 'contributor')
   )
 )
 WITH CHECK (
@@ -245,7 +245,7 @@ WITH CHECK (
     SELECT 1 FROM group_members gm
     WHERE gm.group_id = group_members.group_id
     AND gm.user_id = auth.uid()
-    AND gm.role IN ('admin', 'moderator')
+    AND gm.role IN ('admin', 'contributor')
   )
 );
 

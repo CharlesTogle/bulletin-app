@@ -38,7 +38,7 @@ export async function getPosts(): Promise<ActionResponse<Post[]>> {
   try {
     await requireAuth(); // Ensure user is authenticated
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from('posts')
       .select('*')
@@ -65,7 +65,7 @@ export async function getPost(id: string): Promise<ActionResponse<Post>> {
   try {
     await requireAuth();
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from('posts')
       .select('*')
@@ -95,7 +95,7 @@ export async function createPost(
   try {
     const user = await requireAuth();
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: post, error } = await supabase
       .from('posts')
       .insert({
@@ -132,7 +132,7 @@ export async function updatePost(
   try {
     await requireAuth();
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: post, error } = await supabase
       .from('posts')
       .update({
@@ -167,7 +167,7 @@ export async function deletePost(id: string): Promise<ActionResponse<void>> {
   try {
     await requireAuth();
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const { error } = await supabase.from('posts').delete().eq('id', id);
 
     if (error) throw error;

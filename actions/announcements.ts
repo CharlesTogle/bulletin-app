@@ -1,0 +1,364 @@
+'use server';
+
+import { createClient } from '@/lib/supabase/server';
+import { requireAuth } from '@/lib/auth';
+import {
+  requireGroupRole,
+  canModifyAnnouncement,
+  getUserGroupRole,
+} from '@/lib/auth/permissions';
+import { revalidatePath } from 'next/cache';
+import type { Announcement, AnnouncementWithDetails, ActionResponse } from '@/types/database';
+
+/**
+ * Server Actions for Announcements
+ *
+ * All actions include automatic role verification
+ */
+
+// ============================================================================
+// CREATE ANNOUNCEMENT (Admin, Contributor)
+// ============================================================================
+
+export async function createAnnouncement(data: {
+  groupId: string;
+  title: string;
+  content: string;
+  categoryId?: string;
+  tagIds?: string[];
+  deadline?: string; // ISO 8601 string
+}): Promise<ActionResponse<Announcement>> {
+  try {
+    const user = await requireAuth();
+
+    // Verify user has permission to create announcements
+    await requireGroupRole(
+      data.groupId,
+      ['admin', 'contributor'],
+      'Only admins and contributors can create announcements'
+    );
+
+    const supabase = await createClient();
+
+    // Create announcement
+    const { data: announcement, error } = await supabase
+      .from('announcements')
+      .insert({
+        group_id: data.groupId,
+        author_id: user.id,
+        title: data.title,
+        content: data.content,
+        category_id: data.categoryId || null,
+        deadline: data.deadline || null,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Add tags if provided
+    if (data.tagIds && data.tagIds.length > 0) {
+      const tagInserts = data.tagIds.map((tagId) => ({
+        announcement_id: announcement.id,
+        tag_id: tagId,
+      }));
+
+      const { error: tagError } = await supabase
+        .from('announcement_tags')
+        .insert(tagInserts);
+
+      if (tagError) {
+        console.error('Failed to add tags:', tagError);
+        // Don't fail the whole operation if tags fail
+      }
+    }
+
+    revalidatePath(`/groups/${data.groupId}`);
+    revalidatePath(`/groups/${data.groupId}/announcements`);
+
+    return { success: true, data: announcement };
+  } catch (error) {
+    console.error('Failed to create announcement:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to create announcement',
+    };
+  }
+}
+
+// ============================================================================
+// UPDATE ANNOUNCEMENT (Author, Admin)
+// ============================================================================
+
+export async function updateAnnouncement(
+  announcementId: string,
+  data: {
+    title?: string;
+    content?: string;
+    categoryId?: string;
+    tagIds?: string[];
+    deadline?: string | null;
+    isPinned?: boolean;
+    isArchived?: boolean;
+  }
+): Promise<ActionResponse<Announcement>> {
+  try {
+    await requireAuth();
+
+    // Verify user can modify this announcement
+    const { canModify, isAdmin } = await canModifyAnnouncement(announcementId);
+
+    if (!canModify) {
+      throw new Error('You do not have permission to edit this announcement');
+    }
+
+    const supabase = await createClient();
+
+    // Build update object
+    const updates: any = {};
+    if (data.title !== undefined) updates.title = data.title;
+    if (data.content !== undefined) updates.content = data.content;
+    if (data.categoryId !== undefined) updates.category_id = data.categoryId || null;
+    if (data.deadline !== undefined) updates.deadline = data.deadline;
+
+    // Only admins can pin/archive
+    if (isAdmin) {
+      if (data.isPinned !== undefined) updates.is_pinned = data.isPinned;
+      if (data.isArchived !== undefined) updates.is_archived = data.isArchived;
+    }
+
+    // Update announcement
+    const { data: announcement, error } = await supabase
+      .from('announcements')
+      .update(updates)
+      .eq('id', announcementId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Update tags if provided
+    if (data.tagIds !== undefined) {
+      // Remove existing tags
+      await supabase
+        .from('announcement_tags')
+        .delete()
+        .eq('announcement_id', announcementId);
+
+      // Add new tags
+      if (data.tagIds.length > 0) {
+        const tagInserts = data.tagIds.map((tagId) => ({
+          announcement_id: announcementId,
+          tag_id: tagId,
+        }));
+
+        await supabase.from('announcement_tags').insert(tagInserts);
+      }
+    }
+
+    revalidatePath(`/groups/${announcement.group_id}`);
+    revalidatePath(`/groups/${announcement.group_id}/announcements`);
+    revalidatePath(`/announcements/${announcementId}`);
+
+    return { success: true, data: announcement };
+  } catch (error) {
+    console.error('Failed to update announcement:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update announcement',
+    };
+  }
+}
+
+// ============================================================================
+// DELETE ANNOUNCEMENT (Author, Admin)
+// ============================================================================
+
+export async function deleteAnnouncement(
+  announcementId: string
+): Promise<ActionResponse<void>> {
+  try {
+    await requireAuth();
+
+    // Get announcement to check group
+    const supabase = await createClient();
+    const { data: announcement, error: fetchError } = await supabase
+      .from('announcements')
+      .select('group_id')
+      .eq('id', announcementId)
+      .single();
+
+    if (fetchError || !announcement) {
+      throw new Error('Announcement not found');
+    }
+
+    // Verify user can modify this announcement
+    const { canModify } = await canModifyAnnouncement(announcementId);
+
+    if (!canModify) {
+      throw new Error('You do not have permission to delete this announcement');
+    }
+
+    // Delete announcement (cascade will delete tags, votes, attachments)
+    const { error } = await supabase
+      .from('announcements')
+      .delete()
+      .eq('id', announcementId);
+
+    if (error) throw error;
+
+    revalidatePath(`/groups/${announcement.group_id}`);
+    revalidatePath(`/groups/${announcement.group_id}/announcements`);
+
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error('Failed to delete announcement:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete announcement',
+    };
+  }
+}
+
+// ============================================================================
+// GET ANNOUNCEMENTS (All Members)
+// ============================================================================
+
+export async function getGroupAnnouncements(
+  groupId: string,
+  options?: {
+    includeArchived?: boolean;
+    categoryId?: string;
+    tagId?: string;
+  }
+): Promise<ActionResponse<AnnouncementWithDetails[]>> {
+  try {
+    await requireAuth();
+
+    // Verify user is a member
+    const { isMember, role } = await getUserGroupRole(groupId);
+    if (!isMember) {
+      throw new Error('You are not a member of this group');
+    }
+
+    const supabase = await createClient();
+
+    let query = supabase
+      .from('announcements_with_details')
+      .select('*')
+      .eq('group_id', groupId)
+      .order('is_pinned', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    // Non-admins can't see archived announcements
+    if (!options?.includeArchived || role !== 'admin') {
+      query = query.eq('is_archived', false);
+    }
+
+    // Filter by category
+    if (options?.categoryId) {
+      query = query.eq('category_id', options.categoryId);
+    }
+
+    // Filter by tag (requires joining)
+    if (options?.tagId) {
+      const { data: announcementIds } = await supabase
+        .from('announcement_tags')
+        .select('announcement_id')
+        .eq('tag_id', options.tagId);
+
+      if (announcementIds && announcementIds.length > 0) {
+        const ids = announcementIds.map((a) => a.announcement_id);
+        query = query.in('id', ids);
+      } else {
+        return { success: true, data: [] };
+      }
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    return { success: true, data: data as AnnouncementWithDetails[] };
+  } catch (error) {
+    console.error('Failed to get announcements:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch announcements',
+    };
+  }
+}
+
+// ============================================================================
+// GET SINGLE ANNOUNCEMENT (All Members)
+// ============================================================================
+
+export async function getAnnouncement(
+  announcementId: string
+): Promise<ActionResponse<AnnouncementWithDetails>> {
+  try {
+    await requireAuth();
+
+    const supabase = await createClient();
+
+    // RLS will automatically filter if user has access
+    const { data, error } = await supabase
+      .from('announcements_with_details')
+      .select('*')
+      .eq('id', announcementId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        throw new Error('Announcement not found or you do not have access');
+      }
+      throw error;
+    }
+
+    return { success: true, data: data as AnnouncementWithDetails };
+  } catch (error) {
+    console.error('Failed to get announcement:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch announcement',
+    };
+  }
+}
+
+// ============================================================================
+// CHECK USER PERMISSIONS (Helper for UI)
+// ============================================================================
+
+export async function checkAnnouncementPermissions(announcementId: string): Promise<
+  ActionResponse<{
+    canEdit: boolean;
+    canDelete: boolean;
+    canPin: boolean;
+    canArchive: boolean;
+    isAuthor: boolean;
+    isAdmin: boolean;
+  }>
+> {
+  try {
+    await requireAuth();
+
+    const { canModify, isAuthor, isAdmin } = await canModifyAnnouncement(announcementId);
+
+    return {
+      success: true,
+      data: {
+        canEdit: canModify,
+        canDelete: canModify,
+        canPin: isAdmin,
+        canArchive: isAdmin,
+        isAuthor,
+        isAdmin,
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to check permissions',
+    };
+  }
+}

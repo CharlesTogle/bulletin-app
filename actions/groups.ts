@@ -22,7 +22,7 @@ export async function getMyGroups(): Promise<ActionResponse<GroupWithStats[]>> {
   try {
     const user = await requireAuth();
 
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Get groups where user is a member
     const { data: memberGroups, error: memberError } = await supabase
@@ -64,7 +64,7 @@ export async function getGroup(groupId: string): Promise<ActionResponse<Group>> 
   try {
     await requireAuth();
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from('groups')
       .select('*')
@@ -92,7 +92,7 @@ export async function createGroup(
 ): Promise<ActionResponse<Group>> {
   try {
     const user = await requireAuth();
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Generate unique group code
     const { data: codeData, error: codeError } = await supabase.rpc(
@@ -138,7 +138,7 @@ export async function updateGroup(
   try {
     await requireAuth();
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: group, error } = await supabase
       .from('groups')
       .update(data)
@@ -168,7 +168,7 @@ export async function deleteGroup(groupId: string): Promise<ActionResponse<void>
   try {
     await requireAuth();
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const { error } = await supabase.from('groups').delete().eq('id', groupId);
 
     if (error) throw error;
@@ -195,7 +195,7 @@ export async function deleteGroup(groupId: string): Promise<ActionResponse<void>
 export async function joinGroup(groupCode: string): Promise<ActionResponse<Group>> {
   try {
     const user = await requireAuth();
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Find group by code (case-insensitive)
     const { data: group, error: groupError } = await supabase
@@ -252,7 +252,7 @@ export async function joinGroup(groupCode: string): Promise<ActionResponse<Group
 export async function leaveGroup(groupId: string): Promise<ActionResponse<void>> {
   try {
     const user = await requireAuth();
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Check if user is the only admin
     const { data: admins, error: adminError } = await supabase
@@ -312,7 +312,7 @@ export async function getGroupMembers(
   try {
     await requireAuth();
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from('group_members')
       .select('*')
@@ -337,12 +337,12 @@ export async function getGroupMembers(
 export async function updateMemberRole(
   groupId: string,
   userId: string,
-  role: 'admin' | 'moderator' | 'member'
+  role: 'admin' | 'contributor' | 'member'
 ): Promise<ActionResponse<GroupMember>> {
   try {
     await requireAuth();
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from('group_members')
       .update({ role })
@@ -375,7 +375,7 @@ export async function removeMember(
   try {
     await requireAuth();
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const { error } = await supabase
       .from('group_members')
       .delete()

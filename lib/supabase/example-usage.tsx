@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
-import { supabase, useSupabase } from './index';
+import { useEffect, useMemo } from 'react';
+import { createBrowserClient, useSupabase } from './index';
 
 interface Todo {
   id: number;
@@ -10,6 +10,8 @@ interface Todo {
 }
 
 export function TodosExample() {
+  const supabase = useMemo(() => createBrowserClient(), []);
+
   // Basic usage with callbacks
   // State is managed by Zustand store under the hood
   // Optional: provide a key for shared state across components

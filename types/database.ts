@@ -18,7 +18,7 @@ export interface GroupMember {
   id: string;
   group_id: string;
   user_id: string;
-  role: 'admin' | 'moderator' | 'member';
+  role: 'admin' | 'contributor' | 'member';
   joined_at: string;
 }
 
@@ -27,14 +27,114 @@ export interface GroupWithStats extends Group {
   admin_count: number;
 }
 
-export interface Post {
-  id: string;
+export interface SystemRole {
   user_id: string;
-  group_id: string | null;  // Posts can belong to a group
+  role: 'system_admin';
+  granted_at: string;
+  granted_by: string | null;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string;  // Hex color code
+  icon: string | null;  // Lucide icon name
+  created_at: string;
+}
+
+export interface Tag {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface Announcement {
+  id: string;
+  group_id: string;
+  author_id: string;
+  category_id: string | null;
   title: string;
-  content: string;
+  content: string;  // Markdown content
+  deadline: string | null;  // ISO 8601 timestamp
+  is_pinned: boolean;
+  is_archived: boolean;
+  upvotes_count: number;
+  downvotes_count: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface AnnouncementTag {
+  id: string;
+  announcement_id: string;
+  tag_id: string;
+  created_at: string;
+}
+
+export interface Vote {
+  id: string;
+  announcement_id: string;
+  user_id: string;
+  vote_type: 'upvote' | 'downvote';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Attachment {
+  id: string;
+  announcement_id: string;
+  uploader_id: string;
+  filename: string;
+  file_path: string;  // Path in Supabase Storage
+  file_size: number;  // Bytes
+  mime_type: string;
+  created_at: string;
+}
+
+export interface AnnouncementWithDetails extends Announcement {
+  author_email: string;
+  category_name: string | null;
+  category_color: string | null;
+  tag_names: string[] | null;
+  net_votes: number;
+}
+
+// System Admin Statistics Types
+export interface SystemStatistics {
+  total_groups: number;
+  total_announcements: number;
+  total_memberships: number;
+  total_active_users: number;
+  total_votes: number;
+  total_attachments: number;
+}
+
+export interface GroupActivityStat {
+  id: string;
+  name: string;
+  code: string;
+  created_at: string;
+  member_count: number;
+  announcement_count: number;
+  total_votes: number;
+  last_announcement_at: string | null;
+}
+
+export interface UserActivityStat {
+  id: string;
+  email: string;
+  groups_joined: number;
+  announcements_created: number;
+  votes_cast: number;
+  last_announcement_at: string | null;
+  last_vote_at: string | null;
+}
+
+export interface TimelineData {
+  date: string;
+  groups_created?: number;
+  announcements_created?: number;
 }
 
 // Response types for API consistency

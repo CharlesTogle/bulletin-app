@@ -133,29 +133,36 @@ pnpm lint
 - `app/` - Next.js App Router pages and layouts
   - `layout.tsx` - Root layout with Geist font configuration
   - `page.tsx` - Landing page (unique design, no generic Claude patterns)
+  - `login/page.tsx` - Login page with Supabase auth integration
   - `globals.css` - Global styles and Tailwind imports
 - `actions/` - **Server Actions for ALL database operations**
   - `posts.ts` - Example CRUD operations with Supabase + RLS
   - `groups.ts` - Group management (create, join, leave, members)
+  - `announcements.ts` - Announcement CRUD with role verification
+  - `system-admin.ts` - System admin operations (requires system_admin role)
   - `auth.ts` - Authentication actions (signup, signin, signout)
 - `types/` - **TypeScript type definitions**
   - `database.ts` - Database schema types (Group, GroupMember, Post, etc.)
 - `components/ui/` - **Shadcn UI components** (use for ALL UI)
 - `stores/` - **Zustand stores for ALL client state** (see `stores/README.md`)
   - `supabaseStore.ts` - State management for async operations
+  - `authStore.ts` - Auth form state for login/signup pages
 - `lib/` - Shared utilities and integrations
   - `lib/supabase/` - **Supabase clients and utilities**
     - `server.ts` - Server-side Supabase client (for Server Actions)
     - `client.ts` - Client-side Supabase client (for auth UI ONLY)
     - `middleware.ts` - Session refresh middleware
     - `RLS_GUIDE.md` - Complete Row Level Security guide
-  - `lib/auth/` - **Authentication helpers**
+  - `lib/auth/` - **Authentication & authorization helpers**
     - `index.ts` - requireAuth(), getCurrentUser() helpers
+    - `permissions.ts` - Role checks (system admin, group roles, announcement permissions)
   - `lib/hooks/` - **Custom React hooks**
     - `useServerAction.ts` - Hook for calling Server Actions with loading states
   - `lib/utils.ts` - Utility functions (cn helper for Tailwind)
 - `supabase/migrations/` - SQL migrations and RLS policies
   - `001_create_groups.sql` - Groups schema with RLS
+  - `002_create_announcements_system.sql` - Announcements, votes, attachments
+  - `003_create_system_admin.sql` - System admin role & statistics views
   - `example_rls_policies.sql` - Example RLS policies
   - `README.md` - Migration documentation
 - `middleware.ts` - Next.js middleware for Supabase session refresh
@@ -207,6 +214,7 @@ export function Counter() {
 ### Existing Stores
 
 - `stores/supabaseStore.ts` - Manages state for all Supabase queries (used internally by `useSupabase` hook)
+- `stores/authStore.ts` - Auth form state (email, password, loading, error) for login/signup pages
 
 **Complete documentation:** See `stores/README.md` for detailed patterns, examples, and best practices.
 
@@ -375,6 +383,87 @@ export function UsersList() {
 - `actions/posts.ts` - CRUD operations with Supabase + RLS
 - `actions/auth.ts` - Authentication actions
 - `supabase/migrations/example_rls_policies.sql` - Example RLS policies
+
+## Authorization & Permissions
+
+### System Admin Role
+
+**System Admins** are platform-wide administrators with elevated privileges beyond group-level permissions.
+
+**Capabilities:**
+- Create and manage groups (with optional admin assignment)
+- View system-wide statistics (groups, announcements, users, votes)
+- Access time-series data for analytics graphs
+- Grant/revoke system admin privileges
+- Access all groups regardless of membership
+
+**Permission Checks:**
+```typescript
+import { requireSystemAdmin, isSystemAdmin } from '@/lib/auth/permissions';
+
+// Require system admin
+await requireSystemAdmin(); // Throws if not admin
+
+// Check if current user is system admin
+const isAdmin = await isSystemAdmin(); // Returns boolean
+```
+
+**Server Actions:**
+All system admin operations are in `actions/system-admin.ts`:
+- `grantSystemAdmin(userId)` - Grant admin privileges
+- `revokeSystemAdmin(userId)` - Revoke admin privileges
+- `getSystemAdmins()` - List all system admins
+- `createGroupAsAdmin(data)` - Create group with custom admin assignment
+- `deleteGroupAsAdmin(groupId)` - Delete any group
+- `getSystemStatistics()` - Get platform-wide stats
+- `getGroupsTimeline(days)` - Groups created over time
+- `getAnnouncementsTimeline(days)` - Announcements created over time
+- `getGroupActivityStats()` - Detailed group activity metrics
+- `getTopActiveGroups()` - Most active groups by engagement
+- `getUserActivityStats()` - User engagement across platform
+- `checkSystemAdminStatus()` - Check if current user is system admin
+
+**Database Migration:**
+Run `supabase/migrations/003_create_system_admin.sql` to:
+- Create `system_roles` table
+- Add statistics views for analytics
+- Set up RLS policies for system admin access
+
+**Granting First System Admin (SQL):**
+```sql
+-- Grant system admin to a user by email
+INSERT INTO system_roles (user_id, role)
+SELECT id, 'system_admin'
+FROM auth.users
+WHERE email = 'admin@example.com';
+```
+
+### Group Roles
+
+**Group-level roles** (separate from system admin):
+- **admin**: Manage group settings, members, and all announcements
+- **contributor**: Create, edit, and delete own announcements
+- **member**: View announcements, vote (upvote/downvote)
+
+**Permission Checks:**
+```typescript
+import { requireGroupRole, canModifyAnnouncement } from '@/lib/auth/permissions';
+
+// Require specific role
+await requireGroupRole(groupId, ['admin', 'contributor']);
+
+// Check announcement permissions
+const { canModify, isAuthor, isAdmin } = await canModifyAnnouncement(announcementId);
+```
+
+**System Admin Overrides:**
+System admins automatically have access to:
+- All groups (via `canAccessGroup()`)
+- Group management (via `canManageGroup()`)
+- View archived announcements
+- Delete any group
+
+See `lib/auth/permissions.ts` for complete permission helpers.
 
 ### Styling
 

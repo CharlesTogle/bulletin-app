@@ -16,7 +16,7 @@ export async function signUp(
   password: string
 ): Promise<ActionResponse> {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -41,7 +41,7 @@ export async function signIn(
   password: string
 ): Promise<ActionResponse> {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -63,7 +63,7 @@ export async function signIn(
  * Sign out the current user
  */
 export async function signOut(): Promise<void> {
-  const supabase = createClient();
+  const supabase = await createClient();
   await supabase.auth.signOut();
   revalidatePath('/', 'layout');
   redirect('/');
@@ -73,7 +73,7 @@ export async function signOut(): Promise<void> {
  * Get the current user's session
  */
 export async function getSession() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
