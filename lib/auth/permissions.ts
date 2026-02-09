@@ -132,7 +132,8 @@ export async function isSystemAdmin(): Promise<boolean> {
       .single();
 
     return !error && !!data;
-  } catch {
+  } catch (error) {
+    console.error('[isSystemAdmin] Error:', error);
     return false;
   }
 }

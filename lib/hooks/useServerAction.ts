@@ -167,6 +167,7 @@ export function useServerAction<T>(
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'An unexpected error occurred';
+      console.error(`[useServerAction] ${key} - Error:`, err);
       setError(key, errorMessage);
       if (onError) {
         onError(errorMessage);

@@ -6,7 +6,7 @@
 -- 1. CREATE GROUPS TABLE
 -- ============================================================================
 
-CREATE TABLE groups (
+CREATE TABLE IF NOT EXISTS groups (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   creator_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
@@ -22,11 +22,11 @@ CREATE TABLE groups (
 );
 
 -- Make group code unique (case-insensitive)
-CREATE UNIQUE INDEX idx_groups_code_unique ON groups (UPPER(code));
+CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_code_unique ON groups (UPPER(code));
 
 -- Indexes for performance
-CREATE INDEX idx_groups_creator_id ON groups(creator_id);
-CREATE INDEX idx_groups_created_at ON groups(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_groups_creator_id ON groups(creator_id);
+CREATE INDEX IF NOT EXISTS idx_groups_created_at ON groups(created_at DESC);
 
 -- Add comment to table
 COMMENT ON TABLE groups IS 'Groups that users can create and join using unique codes';
@@ -37,7 +37,7 @@ COMMENT ON COLUMN groups.creator_id IS 'User who created the group';
 -- 2. CREATE GROUP_MEMBERS TABLE (Junction Table)
 -- ============================================================================
 
-CREATE TABLE group_members (
+CREATE TABLE IF NOT EXISTS group_members (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   group_id UUID REFERENCES groups(id) ON DELETE CASCADE NOT NULL,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
@@ -50,9 +50,9 @@ CREATE TABLE group_members (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_group_members_group_id ON group_members(group_id);
-CREATE INDEX idx_group_members_user_id ON group_members(user_id);
-CREATE INDEX idx_group_members_role ON group_members(role);
+CREATE INDEX IF NOT EXISTS idx_group_members_group_id ON group_members(group_id);
+CREATE INDEX IF NOT EXISTS idx_group_members_user_id ON group_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_group_members_role ON group_members(role);
 
 -- Add comments
 COMMENT ON TABLE group_members IS 'Junction table linking users to groups with roles';
@@ -72,6 +72,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger for groups table
+DROP TRIGGER IF EXISTS update_groups_updated_at ON groups;
 CREATE TRIGGER update_groups_updated_at
     BEFORE UPDATE ON groups
     FOR EACH ROW
@@ -91,6 +92,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS add_creator_as_admin_trigger ON groups;
 CREATE TRIGGER add_creator_as_admin_trigger
     AFTER INSERT ON groups
     FOR EACH ROW
@@ -139,8 +141,8 @@ ALTER TABLE group_members ENABLE ROW LEVEL SECURITY;
 -- ============================================================================
 
 -- Policy: Anyone can view groups they are a member of
-CREATE POLICY "Members can view their groups"
-ON groups
+DROP POLICY IF EXISTS "Members can view their groups" ON groups;
+CREATE POLICY "Members can view their groups" ON groups
 FOR SELECT
 USING (
   EXISTS (
@@ -151,14 +153,14 @@ USING (
 );
 
 -- Policy: Authenticated users can create groups
-CREATE POLICY "Authenticated users can create groups"
-ON groups
+DROP POLICY IF EXISTS "Authenticated users can create groups" ON groups;
+CREATE POLICY "Authenticated users can create groups" ON groups
 FOR INSERT
 WITH CHECK (auth.uid() = creator_id);
 
 -- Policy: Only admins can update groups
-CREATE POLICY "Admins can update groups"
-ON groups
+DROP POLICY IF EXISTS "Admins can update groups" ON groups;
+CREATE POLICY "Admins can update groups" ON groups
 FOR UPDATE
 USING (
   EXISTS (
@@ -178,8 +180,8 @@ WITH CHECK (
 );
 
 -- Policy: Only admins can delete groups
-CREATE POLICY "Admins can delete groups"
-ON groups
+DROP POLICY IF EXISTS "Admins can delete groups" ON groups;
+CREATE POLICY "Admins can delete groups" ON groups
 FOR DELETE
 USING (
   EXISTS (
@@ -195,8 +197,8 @@ USING (
 -- ============================================================================
 
 -- Policy: Members can view other members of their groups
-CREATE POLICY "Members can view group members"
-ON group_members
+DROP POLICY IF EXISTS "Members can view group members" ON group_members;
+CREATE POLICY "Members can view group members" ON group_members
 FOR SELECT
 USING (
   EXISTS (
@@ -207,8 +209,8 @@ USING (
 );
 
 -- Policy: Users can join groups (insert themselves as member)
-CREATE POLICY "Users can join groups"
-ON group_members
+DROP POLICY IF EXISTS "Users can join groups" ON group_members;
+CREATE POLICY "Users can join groups" ON group_members
 FOR INSERT
 WITH CHECK (
   auth.uid() = user_id
@@ -216,8 +218,8 @@ WITH CHECK (
 );
 
 -- Policy: Admins can add/promote members
-CREATE POLICY "Admins can manage members"
-ON group_members
+DROP POLICY IF EXISTS "Admins can manage members" ON group_members;
+CREATE POLICY "Admins can manage members" ON group_members
 FOR INSERT
 WITH CHECK (
   EXISTS (
@@ -229,8 +231,8 @@ WITH CHECK (
 );
 
 -- Policy: Admins and contributors can update member roles (except admins can't be demoted by non-creators)
-CREATE POLICY "Admins and contributors can update member roles"
-ON group_members
+DROP POLICY IF EXISTS "Admins and contributors can update member roles" ON group_members;
+CREATE POLICY "Admins and contributors can update member roles" ON group_members
 FOR UPDATE
 USING (
   EXISTS (
@@ -250,8 +252,8 @@ WITH CHECK (
 );
 
 -- Policy: Users can leave groups (delete themselves), admins can remove members
-CREATE POLICY "Users can leave groups or admins can remove members"
-ON group_members
+DROP POLICY IF EXISTS "Users can leave groups or admins can remove members" ON group_members;
+CREATE POLICY "Users can leave groups or admins can remove members" ON group_members
 FOR DELETE
 USING (
   -- User is removing themselves

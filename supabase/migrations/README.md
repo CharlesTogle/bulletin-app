@@ -10,6 +10,7 @@ Run migrations in this order:
 1. `001_create_groups.sql` - Groups and membership system
 2. `002_create_announcements_system.sql` - Announcements, votes, attachments (Not yet run)
 3. `003_create_system_admin.sql` - System admin role and statistics (Not yet run)
+4. `004_add_group_approval.sql` - Group approval workflow (Not yet run)
 
 ### `001_create_groups.sql`
 
@@ -345,7 +346,7 @@ After running the migration, create a storage bucket in Supabase Dashboard:
 
 ✅ **System Admin Role** - Platform-wide privileges
 ✅ **Statistics Views** - Pre-aggregated analytics
-✅ **Helper Functions** - `is_system_admin()`, `auth.is_system_admin()`
+✅ **Helper Functions** - `is_system_admin(user_id)`, `is_current_user_system_admin()`
 ✅ **Complete RLS** - Only system admins can access statistics
 
 #### Granting the First System Admin
@@ -375,6 +376,56 @@ WHERE email = 'your-email@example.com';
 ```
 
 After granting, you can use the Server Actions in `actions/system-admin.ts` to manage additional system admins from the UI.
+
+### `004_add_group_approval.sql`
+
+**Adds group approval workflow:**
+
+#### Changes
+
+1. **Groups table columns added:**
+   - `approved` (BOOLEAN, default FALSE) - Whether group is approved
+   - `approved_at` (TIMESTAMPTZ, nullable) - When approved
+   - `approved_by` (UUID, nullable) - System admin who approved
+
+2. **Updated RLS policies:**
+   - Members can only join approved groups
+   - System admins can see all groups (approved or not)
+   - Group admins can see their own groups even if unapproved
+
+3. **New view:**
+   - `pending_groups` - Shows unapproved groups for system admin dashboard
+
+#### Features
+
+✅ **Approval Required** - All new groups require system admin approval
+✅ **Hide Unapproved** - Members cannot see or join unapproved groups
+✅ **Admin Access** - Group admins can access their unapproved groups but with limited functionality
+✅ **System Admin Control** - Only system admins can approve/reject groups
+
+#### Workflow
+
+1. User creates a group → `approved = false`
+2. Group admin sees "Pending Approval" page
+3. System admin approves the group
+4. Group becomes active and members can join
+
+#### Server Actions
+
+Use these actions from `actions/system-admin.ts`:
+- `getPendingGroups()` - List all pending groups
+- `approveGroup(groupId)` - Approve a group
+- `rejectGroup(groupId)` - Reject and delete a group
+
+Use this action from `actions/groups.ts`:
+- `checkUserGroupApprovalStatus()` - Check if user has unapproved groups
+
+#### UI Components
+
+- `components/admin/PendingGroupsManager.tsx` - System admin component
+- `components/auth/GroupApprovalCheck.tsx` - Redirect helper
+- `app/pending-approval/page.tsx` - Pending approval page for group admins
+- `app/signup/page.tsx` - Sign up with create group or join group
 
 ## Resources
 

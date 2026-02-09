@@ -8,7 +8,7 @@
 -- ============================================================================
 
 -- Create system_roles table
-CREATE TABLE system_roles (
+CREATE TABLE IF NOT EXISTS system_roles (
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   role TEXT NOT NULL CHECK (role IN ('system_admin')),
   granted_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE system_roles (
 );
 
 -- Create index for faster lookups
-CREATE INDEX idx_system_roles_role ON system_roles(role);
+CREATE INDEX IF NOT EXISTS idx_system_roles_role ON system_roles(role);
 
 -- ============================================================================
 -- RLS POLICIES - System Roles
@@ -25,8 +25,8 @@ CREATE INDEX idx_system_roles_role ON system_roles(role);
 ALTER TABLE system_roles ENABLE ROW LEVEL SECURITY;
 
 -- System admins can view all system roles
-CREATE POLICY "System admins can view all system roles"
-  ON system_roles
+DROP POLICY IF EXISTS "System admins can view all system roles" ON system_roles;
+CREATE POLICY "System admins can view all system roles" ON system_roles
   FOR SELECT
   TO authenticated
   USING (
@@ -38,8 +38,8 @@ CREATE POLICY "System admins can view all system roles"
   );
 
 -- Only system admins can grant system admin roles
-CREATE POLICY "System admins can grant roles"
-  ON system_roles
+DROP POLICY IF EXISTS "System admins can grant roles" ON system_roles;
+CREATE POLICY "System admins can grant roles" ON system_roles
   FOR INSERT
   TO authenticated
   WITH CHECK (
@@ -51,8 +51,8 @@ CREATE POLICY "System admins can grant roles"
   );
 
 -- System admins can revoke roles
-CREATE POLICY "System admins can revoke roles"
-  ON system_roles
+DROP POLICY IF EXISTS "System admins can revoke roles" ON system_roles;
+CREATE POLICY "System admins can revoke roles" ON system_roles
   FOR DELETE
   TO authenticated
   USING (
@@ -68,7 +68,7 @@ CREATE POLICY "System admins can revoke roles"
 -- ============================================================================
 
 -- System overview statistics
-CREATE VIEW system_statistics AS
+CREATE OR REPLACE VIEW system_statistics AS
 SELECT
   (SELECT COUNT(*) FROM groups) as total_groups,
   (SELECT COUNT(*) FROM announcements) as total_announcements,
@@ -78,7 +78,7 @@ SELECT
   (SELECT COUNT(*) FROM attachments) as total_attachments;
 
 -- Groups created over time (for graphs)
-CREATE VIEW groups_created_timeline AS
+CREATE OR REPLACE VIEW groups_created_timeline AS
 SELECT
   DATE_TRUNC('day', created_at) as date,
   COUNT(*) as groups_created
@@ -87,7 +87,7 @@ GROUP BY DATE_TRUNC('day', created_at)
 ORDER BY date DESC;
 
 -- Announcements created over time (for graphs)
-CREATE VIEW announcements_created_timeline AS
+CREATE OR REPLACE VIEW announcements_created_timeline AS
 SELECT
   DATE_TRUNC('day', created_at) as date,
   COUNT(*) as announcements_created
@@ -96,7 +96,7 @@ GROUP BY DATE_TRUNC('day', created_at)
 ORDER BY date DESC;
 
 -- Group activity statistics
-CREATE VIEW group_activity_stats AS
+CREATE OR REPLACE VIEW group_activity_stats AS
 SELECT
   g.id,
   g.name,
@@ -114,7 +114,7 @@ GROUP BY g.id, g.name, g.code, g.created_at
 ORDER BY g.created_at DESC;
 
 -- Top active groups by announcements
-CREATE VIEW top_active_groups AS
+CREATE OR REPLACE VIEW top_active_groups AS
 SELECT
   g.id,
   g.name,
@@ -131,7 +131,7 @@ ORDER BY announcement_count DESC, vote_count DESC
 LIMIT 20;
 
 -- User activity statistics
-CREATE VIEW user_activity_stats AS
+CREATE OR REPLACE VIEW user_activity_stats AS
 SELECT
   u.id,
   u.email,
@@ -175,8 +175,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Get system admin status for current user
-CREATE OR REPLACE FUNCTION auth.is_system_admin()
+-- Helper function to check if current user is system admin
+-- Usage in policies: is_current_user_system_admin()
+CREATE OR REPLACE FUNCTION is_current_user_system_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
   RETURN is_system_admin(auth.uid());

@@ -10,6 +10,9 @@ export interface Group {
   name: string;
   code: string;
   description: string | null;
+  approved: boolean;
+  approved_at: string | null;
+  approved_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -25,6 +28,7 @@ export interface GroupMember {
 export interface GroupWithStats extends Group {
   member_count: number;
   admin_count: number;
+  announcement_count?: number; // Optional, only populated for system admins
 }
 
 export interface SystemRole {

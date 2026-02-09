@@ -144,6 +144,123 @@ export async function getSystemAdmins(): Promise<
 }
 
 // ============================================================================
+// GROUP APPROVAL (System Admin)
+// ============================================================================
+
+/**
+ * Get pending groups awaiting approval
+ */
+export async function getPendingGroups(): Promise<
+  ActionResponse<
+    Array<{
+      id: string;
+      name: string;
+      code: string;
+      description: string | null;
+      created_at: string;
+      creator_email: string;
+      admin_count: number;
+    }>
+  >
+> {
+  try {
+    await requireSystemAdmin();
+
+    const supabase = await createClient();
+
+    // Use the SECURITY DEFINER function instead of the view
+    const { data, error } = await supabase.rpc('get_pending_groups');
+
+    if (error) throw error;
+
+    return { success: true, data: data || [] };
+  } catch (error) {
+    // Don't log auth errors during sign out - they're expected
+    const isAuthError = error instanceof Error &&
+      (error.message.includes('Authentication required') ||
+       error.message.includes('System admin privileges required'));
+
+    if (!isAuthError) {
+      console.error('Failed to get pending groups:', error);
+    }
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch pending groups',
+    };
+  }
+}
+
+/**
+ * Approve a group
+ */
+export async function approveGroup(
+  groupId: string
+): Promise<ActionResponse<void>> {
+  try {
+    const currentUser = await requireAuth();
+    await requireSystemAdmin('Only system admins can approve groups');
+
+    const supabase = await createClient();
+
+    const { error } = await supabase
+      .from('groups')
+      .update({
+        approved: true,
+        approved_at: new Date().toISOString(),
+        approved_by: currentUser.id,
+      })
+      .eq('id', groupId);
+
+    if (error) throw error;
+
+    revalidatePath('/admin/groups');
+    revalidatePath('/admin/pending');
+    revalidatePath(`/groups/${groupId}`);
+
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error('Failed to approve group:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to approve group',
+    };
+  }
+}
+
+/**
+ * Reject and delete a group
+ */
+export async function rejectGroup(
+  groupId: string
+): Promise<ActionResponse<void>> {
+  try {
+    await requireSystemAdmin('Only system admins can reject groups');
+
+    const supabase = await createClient();
+
+    // Delete the group (cascade will remove members)
+    const { error } = await supabase
+      .from('groups')
+      .delete()
+      .eq('id', groupId);
+
+    if (error) throw error;
+
+    revalidatePath('/admin/groups');
+    revalidatePath('/admin/pending');
+
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error('Failed to reject group:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to reject group',
+    };
+  }
+}
+
+// ============================================================================
 // GROUP MANAGEMENT (System Admin)
 // ============================================================================
 
@@ -269,7 +386,15 @@ export async function getSystemStatistics(): Promise<
 
     return { success: true, data };
   } catch (error) {
-    console.error('Failed to get system statistics:', error);
+    // Don't log auth errors during sign out - they're expected
+    const isAuthError = error instanceof Error &&
+      (error.message.includes('Authentication required') ||
+       error.message.includes('System admin privileges required'));
+
+    if (!isAuthError) {
+      console.error('Failed to get system statistics:', error);
+    }
+
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to fetch statistics',
@@ -469,6 +594,7 @@ export async function checkSystemAdminStatus(): Promise<
       data: { isSystemAdmin: isSysAdmin },
     };
   } catch (error) {
+    console.error('[checkSystemAdminStatus] Error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to check admin status',

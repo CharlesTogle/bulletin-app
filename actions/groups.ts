@@ -20,11 +20,47 @@ import type { Group, GroupMember, GroupWithStats, ActionResponse } from '@/types
  */
 export async function getMyGroups(): Promise<ActionResponse<GroupWithStats[]>> {
   try {
+    console.log('[getMyGroups] Starting...');
     const user = await requireAuth();
+    console.log('[getMyGroups] User authenticated:', user.id);
 
     const supabase = await createClient();
 
-    // Get groups where user is a member
+    // Check if user is system admin
+    console.log('[getMyGroups] Checking system admin status...');
+    const { data: systemRole, error: roleError } = await supabase
+      .from('system_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('role', 'system_admin')
+      .single();
+
+    if (roleError && roleError.code !== 'PGRST116') {
+      console.error('[getMyGroups] System role check error:', roleError);
+      throw roleError;
+    }
+
+    const isSystemAdmin = !!systemRole;
+    console.log('[getMyGroups] Is system admin:', isSystemAdmin);
+
+    // System admins can see ALL groups
+    if (isSystemAdmin) {
+      console.log('[getMyGroups] Fetching all groups (system admin)...');
+
+      // Fetch groups with counts in a single query using SQL aggregation
+      const { data: groups, error } = await supabase.rpc('get_all_groups_with_counts');
+
+      if (error) {
+        console.error('[getMyGroups] System admin groups fetch error:', error);
+        throw error;
+      }
+
+      console.log('[getMyGroups] Fetched groups:', groups?.length || 0);
+
+      return { success: true, data: groups as GroupWithStats[] };
+    }
+
+    // Regular users: Get groups where user is a member
     const { data: memberGroups, error: memberError } = await supabase
       .from('group_members')
       .select('group_id')
@@ -32,22 +68,33 @@ export async function getMyGroups(): Promise<ActionResponse<GroupWithStats[]>> {
 
     if (memberError) throw memberError;
 
-    const groupIds = memberGroups.map((m) => m.group_id);
+    const groupIds = memberGroups?.map((m) => m.group_id) || [];
 
     if (groupIds.length === 0) {
       return { success: true, data: [] };
     }
 
-    // Get group details with stats
+    // Get group details
     const { data, error } = await supabase
-      .from('groups_with_stats')
+      .from('groups')
       .select('*')
       .in('id', groupIds)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Regular user groups fetch error:', error);
+      throw error;
+    }
 
-    return { success: true, data: data as GroupWithStats[] };
+    // For now, just return groups with default counts
+    // TODO: Add proper member counts later
+    const formattedData = data?.map((g: any) => ({
+      ...g,
+      member_count: 0,
+      admin_count: 0,
+    }));
+
+    return { success: true, data: formattedData as GroupWithStats[] };
   } catch (error) {
     console.error('Failed to get groups:', error);
     return {
@@ -206,9 +253,14 @@ export async function joinGroup(groupCode: string): Promise<ActionResponse<Group
 
     if (groupError) {
       if (groupError.code === 'PGRST116') {
-        return { success: false, error: 'Invalid group code' };
+        return { success: false, error: 'Group does not exist' };
       }
       throw groupError;
+    }
+
+    // Check if group is approved (hide unapproved groups from members)
+    if (!group.approved) {
+      return { success: false, error: 'Group does not exist' };
     }
 
     // Check if already a member
@@ -223,7 +275,7 @@ export async function joinGroup(groupCode: string): Promise<ActionResponse<Group
       return { success: false, error: 'You are already a member of this group' };
     }
 
-    // Join group as member
+    // Join group as member (RLS policy will enforce approved=true)
     const { error: joinError } = await supabase
       .from('group_members')
       .insert({
@@ -392,6 +444,75 @@ export async function removeMember(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to remove member',
+    };
+  }
+}
+
+// ============================================================================
+// GROUP APPROVAL STATUS
+// ============================================================================
+
+/**
+ * Check if current user has any unapproved groups where they are admin
+ * Used to redirect to pending approval page
+ */
+export async function checkUserGroupApprovalStatus(): Promise<
+  ActionResponse<{
+    hasUnapprovedGroup: boolean;
+    unapprovedGroupId: string | null;
+  }>
+> {
+  try {
+    const user = await requireAuth();
+    const supabase = await createClient();
+
+    // Get groups where user is admin
+    const { data: adminMemberships, error: memberError } = await supabase
+      .from('group_members')
+      .select('group_id')
+      .eq('user_id', user.id)
+      .eq('role', 'admin');
+
+    if (memberError) throw memberError;
+
+    if (!adminMemberships || adminMemberships.length === 0) {
+      return {
+        success: true,
+        data: { hasUnapprovedGroup: false, unapprovedGroupId: null },
+      };
+    }
+
+    const groupIds = adminMemberships.map((m) => m.group_id);
+
+    // Check if any of these groups are unapproved
+    const { data: unapprovedGroups, error: groupError } = await supabase
+      .from('groups')
+      .select('id, approved')
+      .in('id', groupIds)
+      .eq('approved', false)
+      .limit(1);
+
+    if (groupError) throw groupError;
+
+    if (unapprovedGroups && unapprovedGroups.length > 0) {
+      return {
+        success: true,
+        data: {
+          hasUnapprovedGroup: true,
+          unapprovedGroupId: unapprovedGroups[0].id,
+        },
+      };
+    }
+
+    return {
+      success: true,
+      data: { hasUnapprovedGroup: false, unapprovedGroupId: null },
+    };
+  } catch (error) {
+    console.error('Failed to check group approval status:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to check status',
     };
   }
 }

@@ -26,6 +26,39 @@ See `lib/supabase/RLS_GUIDE.md` and `actions/posts.ts` for detailed patterns and
 - Create a new store for each domain (e.g., `userStore`, `todosStore`, `uiStore`)
 - See `stores/README.md` for detailed guidelines and examples
 
+### State Modification Pattern
+
+**NEVER put state modification directly inside useEffect. Always wrap it in useCallback first.**
+
+❌ **WRONG:**
+```tsx
+useEffect(() => {
+  async function fetchData() {
+    const data = await api.getData();
+    setData(data); // State modification in useEffect
+  }
+  fetchData();
+}, []);
+```
+
+✅ **CORRECT:**
+```tsx
+const fetchData = useCallback(async () => {
+  const data = await api.getData();
+  setData(data); // State modification in useCallback
+}, [/* correct dependencies */]);
+
+useEffect(() => {
+  fetchData(); // Call the memoized callback
+}, [fetchData]);
+```
+
+**Why?**
+- Separates concerns: data fetching logic vs side effect timing
+- Prevents unnecessary re-renders from function recreation
+- Makes dependencies explicit and easier to track
+- Allows reusing the callback elsewhere if needed
+
 ## 🎨 CRITICAL: UI/Design Guidelines
 
 **IMPORTANT: Use Shadcn UI + Lucide React for ALL UI components. Avoid generic Claude/AI assistant website designs.**
@@ -134,6 +167,8 @@ pnpm lint
   - `layout.tsx` - Root layout with Geist font configuration
   - `page.tsx` - Landing page (unique design, no generic Claude patterns)
   - `login/page.tsx` - Login page with Supabase auth integration
+  - `signup/page.tsx` - Sign up with create group or join group tabs
+  - `pending-approval/page.tsx` - Pending approval page for unapproved groups
   - `globals.css` - Global styles and Tailwind imports
 - `actions/` - **Server Actions for ALL database operations**
   - `posts.ts` - Example CRUD operations with Supabase + RLS
@@ -143,7 +178,16 @@ pnpm lint
   - `auth.ts` - Authentication actions (signup, signin, signout)
 - `types/` - **TypeScript type definitions**
   - `database.ts` - Database schema types (Group, GroupMember, Post, etc.)
-- `components/ui/` - **Shadcn UI components** (use for ALL UI)
+- `components/` - React components
+  - `ui/` - **Shadcn UI components** (use for ALL UI)
+  - `auth/` - Authentication components
+    - `GroupApprovalCheck.tsx` - Auto-redirect for unapproved groups
+  - `admin/` - System admin components
+    - `SystemAdminDashboard.tsx` - Statistics dashboard
+    - `PendingGroupsManager.tsx` - Approve/reject groups interface
+  - `announcements/` - Announcement components
+    - `AnnouncementCard.tsx` - Display announcement with actions
+    - `CreateAnnouncementForm.tsx` - Create new announcement
 - `stores/` - **Zustand stores for ALL client state** (see `stores/README.md`)
   - `supabaseStore.ts` - State management for async operations
   - `authStore.ts` - Auth form state for login/signup pages
@@ -437,6 +481,38 @@ SELECT id, 'system_admin'
 FROM auth.users
 WHERE email = 'admin@example.com';
 ```
+
+### Group Approval Workflow
+
+**All new groups require system admin approval before becoming active.**
+
+**Flow:**
+1. User signs up and creates a group → Group created with `approved = false`
+2. Group admin is redirected to `/pending-approval` page
+3. System admin approves the group via admin dashboard
+4. Group becomes active, members can join using group code
+
+**Key Rules:**
+- Unapproved groups are hidden from non-members (appear as "Group does not exist")
+- Group admins can access their unapproved groups but with limited functionality
+- Only system admins can approve/reject groups
+- System admins can see all groups regardless of approval status
+
+**Sign Up Flows:**
+- **Create Group:** Sign up → Create group → Pending approval page
+- **Join Group:** Sign up → Join with code (only approved groups) → Group dashboard
+
+**Components:**
+- `app/signup/page.tsx` - Two-tab sign up (create group or join group)
+- `app/pending-approval/page.tsx` - Waiting page for group admins
+- `components/auth/GroupApprovalCheck.tsx` - Auto-redirect to pending page
+- `components/admin/PendingGroupsManager.tsx` - System admin approval UI
+
+**Actions:**
+- `checkUserGroupApprovalStatus()` - Check if user has unapproved groups
+- `getPendingGroups()` - List pending groups (system admin only)
+- `approveGroup(groupId)` - Approve group (system admin only)
+- `rejectGroup(groupId)` - Reject and delete group (system admin only)
 
 ### Group Roles
 

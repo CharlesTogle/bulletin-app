@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useServerAction } from '@/lib/hooks/useServerAction';
 import {
   getSystemStatistics,
@@ -26,6 +26,10 @@ import {
  * Requires user to have system_admin role
  */
 export function SystemAdminDashboard() {
+  // Memoize timeline action wrappers to prevent infinite loops
+  const getGroupsTimelineAction = useCallback(() => getGroupsTimeline(30), []);
+  const getAnnouncementsTimelineAction = useCallback(() => getAnnouncementsTimeline(30), []);
+
   // Fetch statistics
   const {
     data: stats,
@@ -48,14 +52,14 @@ export function SystemAdminDashboard() {
   const {
     data: groupsTimeline,
     execute: fetchGroupsTimeline,
-  } = useServerAction(() => getGroupsTimeline(30), {
+  } = useServerAction(getGroupsTimelineAction, {
     key: 'groups-timeline',
   });
 
   const {
     data: announcementsTimeline,
     execute: fetchAnnouncementsTimeline,
-  } = useServerAction(() => getAnnouncementsTimeline(30), {
+  } = useServerAction(getAnnouncementsTimelineAction, {
     key: 'announcements-timeline',
   });
 

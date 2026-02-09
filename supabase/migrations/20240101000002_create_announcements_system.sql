@@ -6,7 +6,7 @@
 -- 1. CREATE CATEGORIES TABLE
 -- ============================================================================
 
-CREATE TABLE categories (
+CREATE TABLE IF NOT EXISTS categories (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT,
@@ -19,9 +19,9 @@ CREATE TABLE categories (
 );
 
 -- Make category names unique per system (case-insensitive)
-CREATE UNIQUE INDEX idx_categories_name_unique ON categories (LOWER(name));
+CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name_unique ON categories (LOWER(name));
 
-CREATE INDEX idx_categories_name ON categories(name);
+CREATE INDEX IF NOT EXISTS idx_categories_name ON categories(name);
 
 COMMENT ON TABLE categories IS 'Categories for organizing announcements';
 COMMENT ON COLUMN categories.color IS 'Hex color code for UI display';
@@ -31,7 +31,7 @@ COMMENT ON COLUMN categories.icon IS 'Icon name from lucide-react library';
 -- 2. CREATE TAGS TABLE
 -- ============================================================================
 
-CREATE TABLE tags (
+CREATE TABLE IF NOT EXISTS tags (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
@@ -40,9 +40,9 @@ CREATE TABLE tags (
 );
 
 -- Make tag names unique (case-insensitive)
-CREATE UNIQUE INDEX idx_tags_name_unique ON tags (LOWER(name));
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_name_unique ON tags (LOWER(name));
 
-CREATE INDEX idx_tags_name ON tags(name);
+CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);
 
 COMMENT ON TABLE tags IS 'Tags for labeling announcements';
 
@@ -50,7 +50,7 @@ COMMENT ON TABLE tags IS 'Tags for labeling announcements';
 -- 3. CREATE ANNOUNCEMENTS TABLE
 -- ============================================================================
 
-CREATE TABLE announcements (
+CREATE TABLE IF NOT EXISTS announcements (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   group_id UUID REFERENCES groups(id) ON DELETE CASCADE NOT NULL,
   author_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
@@ -76,12 +76,12 @@ CREATE TABLE announcements (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_announcements_group_id ON announcements(group_id);
-CREATE INDEX idx_announcements_author_id ON announcements(author_id);
-CREATE INDEX idx_announcements_category_id ON announcements(category_id);
-CREATE INDEX idx_announcements_created_at ON announcements(created_at DESC);
-CREATE INDEX idx_announcements_deadline ON announcements(deadline) WHERE deadline IS NOT NULL;
-CREATE INDEX idx_announcements_pinned ON announcements(is_pinned) WHERE is_pinned = TRUE;
+CREATE INDEX IF NOT EXISTS idx_announcements_group_id ON announcements(group_id);
+CREATE INDEX IF NOT EXISTS idx_announcements_author_id ON announcements(author_id);
+CREATE INDEX IF NOT EXISTS idx_announcements_category_id ON announcements(category_id);
+CREATE INDEX IF NOT EXISTS idx_announcements_created_at ON announcements(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_announcements_deadline ON announcements(deadline) WHERE deadline IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_announcements_pinned ON announcements(is_pinned) WHERE is_pinned = TRUE;
 
 COMMENT ON TABLE announcements IS 'Announcements within groups with markdown support';
 COMMENT ON COLUMN announcements.content IS 'Markdown formatted content';
@@ -93,7 +93,7 @@ COMMENT ON COLUMN announcements.is_archived IS 'Archived announcements hidden fr
 -- 4. CREATE ANNOUNCEMENT_TAGS JUNCTION TABLE
 -- ============================================================================
 
-CREATE TABLE announcement_tags (
+CREATE TABLE IF NOT EXISTS announcement_tags (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   announcement_id UUID REFERENCES announcements(id) ON DELETE CASCADE NOT NULL,
   tag_id UUID REFERENCES tags(id) ON DELETE CASCADE NOT NULL,
@@ -102,8 +102,8 @@ CREATE TABLE announcement_tags (
   CONSTRAINT announcement_tags_unique UNIQUE(announcement_id, tag_id)
 );
 
-CREATE INDEX idx_announcement_tags_announcement_id ON announcement_tags(announcement_id);
-CREATE INDEX idx_announcement_tags_tag_id ON announcement_tags(tag_id);
+CREATE INDEX IF NOT EXISTS idx_announcement_tags_announcement_id ON announcement_tags(announcement_id);
+CREATE INDEX IF NOT EXISTS idx_announcement_tags_tag_id ON announcement_tags(tag_id);
 
 COMMENT ON TABLE announcement_tags IS 'Many-to-many relationship between announcements and tags';
 
@@ -111,7 +111,7 @@ COMMENT ON TABLE announcement_tags IS 'Many-to-many relationship between announc
 -- 5. CREATE VOTES TABLE
 -- ============================================================================
 
-CREATE TABLE votes (
+CREATE TABLE IF NOT EXISTS votes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   announcement_id UUID REFERENCES announcements(id) ON DELETE CASCADE NOT NULL,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
@@ -123,9 +123,9 @@ CREATE TABLE votes (
   CONSTRAINT votes_type_check CHECK (vote_type IN ('upvote', 'downvote'))
 );
 
-CREATE INDEX idx_votes_announcement_id ON votes(announcement_id);
-CREATE INDEX idx_votes_user_id ON votes(user_id);
-CREATE INDEX idx_votes_type ON votes(vote_type);
+CREATE INDEX IF NOT EXISTS idx_votes_announcement_id ON votes(announcement_id);
+CREATE INDEX IF NOT EXISTS idx_votes_user_id ON votes(user_id);
+CREATE INDEX IF NOT EXISTS idx_votes_type ON votes(vote_type);
 
 COMMENT ON TABLE votes IS 'User votes on announcements (one vote per user per announcement)';
 COMMENT ON COLUMN votes.vote_type IS 'Type of vote: upvote or downvote';
@@ -134,7 +134,7 @@ COMMENT ON COLUMN votes.vote_type IS 'Type of vote: upvote or downvote';
 -- 6. CREATE ATTACHMENTS TABLE (Supabase Storage)
 -- ============================================================================
 
-CREATE TABLE attachments (
+CREATE TABLE IF NOT EXISTS attachments (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   announcement_id UUID REFERENCES announcements(id) ON DELETE CASCADE NOT NULL,
   uploader_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
@@ -150,8 +150,8 @@ CREATE TABLE attachments (
   CONSTRAINT attachments_file_size_limit CHECK (file_size > 0 AND file_size <= 52428800)  -- 50MB limit
 );
 
-CREATE INDEX idx_attachments_announcement_id ON attachments(announcement_id);
-CREATE INDEX idx_attachments_uploader_id ON attachments(uploader_id);
+CREATE INDEX IF NOT EXISTS idx_attachments_announcement_id ON attachments(announcement_id);
+CREATE INDEX IF NOT EXISTS idx_attachments_uploader_id ON attachments(uploader_id);
 
 COMMENT ON TABLE attachments IS 'File attachments stored in Supabase Storage';
 COMMENT ON COLUMN attachments.file_path IS 'Path to file in Supabase Storage bucket';
@@ -162,12 +162,14 @@ COMMENT ON COLUMN attachments.file_size IS 'File size in bytes (max 50MB)';
 -- ============================================================================
 
 -- Trigger for announcements
+DROP TRIGGER IF EXISTS update_announcements_updated_at ON announcements;
 CREATE TRIGGER update_announcements_updated_at
     BEFORE UPDATE ON announcements
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
 -- Trigger for votes
+DROP TRIGGER IF EXISTS update_votes_updated_at ON votes;
 CREATE TRIGGER update_votes_updated_at
     BEFORE UPDATE ON votes
     FOR EACH ROW
@@ -209,6 +211,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger to update vote counts
+DROP TRIGGER IF EXISTS update_vote_counts_trigger ON votes;
 CREATE TRIGGER update_vote_counts_trigger
     AFTER INSERT OR UPDATE OR DELETE ON votes
     FOR EACH ROW
@@ -230,14 +233,14 @@ ALTER TABLE attachments ENABLE ROW LEVEL SECURITY;
 -- ============================================================================
 
 -- Anyone can view categories
-CREATE POLICY "Anyone can view categories"
-ON categories
+DROP POLICY IF EXISTS "Anyone can view categories" ON categories;
+CREATE POLICY "Anyone can view categories" ON categories
 FOR SELECT
 USING (true);
 
 -- Only authenticated users can create categories (for now - can be restricted later)
-CREATE POLICY "Authenticated users can create categories"
-ON categories
+DROP POLICY IF EXISTS "Authenticated users can create categories" ON categories;
+CREATE POLICY "Authenticated users can create categories" ON categories
 FOR INSERT
 WITH CHECK (auth.uid() IS NOT NULL);
 
@@ -246,14 +249,14 @@ WITH CHECK (auth.uid() IS NOT NULL);
 -- ============================================================================
 
 -- Anyone can view tags
-CREATE POLICY "Anyone can view tags"
-ON tags
+DROP POLICY IF EXISTS "Anyone can view tags" ON tags;
+CREATE POLICY "Anyone can view tags" ON tags
 FOR SELECT
 USING (true);
 
 -- Authenticated users can create tags
-CREATE POLICY "Authenticated users can create tags"
-ON tags
+DROP POLICY IF EXISTS "Authenticated users can create tags" ON tags;
+CREATE POLICY "Authenticated users can create tags" ON tags
 FOR INSERT
 WITH CHECK (auth.uid() IS NOT NULL);
 
@@ -262,8 +265,8 @@ WITH CHECK (auth.uid() IS NOT NULL);
 -- ============================================================================
 
 -- Members can view announcements in their groups (exclude archived unless admin)
-CREATE POLICY "Members can view group announcements"
-ON announcements
+DROP POLICY IF EXISTS "Members can view group announcements" ON announcements;
+CREATE POLICY "Members can view group announcements" ON announcements
 FOR SELECT
 USING (
   EXISTS (
@@ -283,8 +286,8 @@ USING (
 );
 
 -- Admins and contributors can create announcements
-CREATE POLICY "Admins and contributors can create announcements"
-ON announcements
+DROP POLICY IF EXISTS "Admins and contributors can create announcements" ON announcements;
+CREATE POLICY "Admins and contributors can create announcements" ON announcements
 FOR INSERT
 WITH CHECK (
   EXISTS (
@@ -297,8 +300,8 @@ WITH CHECK (
 );
 
 -- Authors can update their own announcements, admins can update any
-CREATE POLICY "Authors and admins can update announcements"
-ON announcements
+DROP POLICY IF EXISTS "Authors and admins can update announcements" ON announcements;
+CREATE POLICY "Authors and admins can update announcements" ON announcements
 FOR UPDATE
 USING (
   auth.uid() = author_id
@@ -320,8 +323,8 @@ WITH CHECK (
 );
 
 -- Authors can delete their own announcements, admins can delete any
-CREATE POLICY "Authors and admins can delete announcements"
-ON announcements
+DROP POLICY IF EXISTS "Authors and admins can delete announcements" ON announcements;
+CREATE POLICY "Authors and admins can delete announcements" ON announcements
 FOR DELETE
 USING (
   auth.uid() = author_id
@@ -338,8 +341,8 @@ USING (
 -- ============================================================================
 
 -- Members can view tags on announcements in their groups
-CREATE POLICY "Members can view announcement tags"
-ON announcement_tags
+DROP POLICY IF EXISTS "Members can view announcement tags" ON announcement_tags;
+CREATE POLICY "Members can view announcement tags" ON announcement_tags
 FOR SELECT
 USING (
   EXISTS (
@@ -351,8 +354,8 @@ USING (
 );
 
 -- Authors and admins can add tags to announcements
-CREATE POLICY "Authors and admins can add tags"
-ON announcement_tags
+DROP POLICY IF EXISTS "Authors and admins can add tags" ON announcement_tags;
+CREATE POLICY "Authors and admins can add tags" ON announcement_tags
 FOR INSERT
 WITH CHECK (
   EXISTS (
@@ -367,8 +370,8 @@ WITH CHECK (
 );
 
 -- Authors and admins can remove tags
-CREATE POLICY "Authors and admins can remove tags"
-ON announcement_tags
+DROP POLICY IF EXISTS "Authors and admins can remove tags" ON announcement_tags;
+CREATE POLICY "Authors and admins can remove tags" ON announcement_tags
 FOR DELETE
 USING (
   EXISTS (
@@ -387,8 +390,8 @@ USING (
 -- ============================================================================
 
 -- Members can view votes on announcements in their groups
-CREATE POLICY "Members can view votes"
-ON votes
+DROP POLICY IF EXISTS "Members can view votes" ON votes;
+CREATE POLICY "Members can view votes" ON votes
 FOR SELECT
 USING (
   EXISTS (
@@ -400,8 +403,8 @@ USING (
 );
 
 -- Members can cast votes
-CREATE POLICY "Members can vote"
-ON votes
+DROP POLICY IF EXISTS "Members can vote" ON votes;
+CREATE POLICY "Members can vote" ON votes
 FOR INSERT
 WITH CHECK (
   EXISTS (
@@ -414,15 +417,15 @@ WITH CHECK (
 );
 
 -- Users can change their own votes
-CREATE POLICY "Users can change their votes"
-ON votes
+DROP POLICY IF EXISTS "Users can change their votes" ON votes;
+CREATE POLICY "Users can change their votes" ON votes
 FOR UPDATE
 USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);
 
 -- Users can remove their own votes
-CREATE POLICY "Users can remove their votes"
-ON votes
+DROP POLICY IF EXISTS "Users can remove their votes" ON votes;
+CREATE POLICY "Users can remove their votes" ON votes
 FOR DELETE
 USING (auth.uid() = user_id);
 
@@ -431,8 +434,8 @@ USING (auth.uid() = user_id);
 -- ============================================================================
 
 -- Members can view attachments on announcements in their groups
-CREATE POLICY "Members can view attachments"
-ON attachments
+DROP POLICY IF EXISTS "Members can view attachments" ON attachments;
+CREATE POLICY "Members can view attachments" ON attachments
 FOR SELECT
 USING (
   EXISTS (
@@ -444,8 +447,8 @@ USING (
 );
 
 -- Authors and admins can add attachments
-CREATE POLICY "Authors and admins can add attachments"
-ON attachments
+DROP POLICY IF EXISTS "Authors and admins can add attachments" ON attachments;
+CREATE POLICY "Authors and admins can add attachments" ON attachments
 FOR INSERT
 WITH CHECK (
   EXISTS (
@@ -461,8 +464,8 @@ WITH CHECK (
 );
 
 -- Uploaders and admins can delete attachments
-CREATE POLICY "Uploaders and admins can delete attachments"
-ON attachments
+DROP POLICY IF EXISTS "Uploaders and admins can delete attachments" ON attachments;
+CREATE POLICY "Uploaders and admins can delete attachments" ON attachments
 FOR DELETE
 USING (
   auth.uid() = uploader_id
