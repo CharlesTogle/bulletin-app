@@ -138,8 +138,19 @@ export async function createGroup(
   data: Pick<Group, 'name'> & { description?: string }
 ): Promise<ActionResponse<Group>> {
   try {
+    console.log('[createGroup] Starting...');
     const user = await requireAuth();
+    console.log('[createGroup] User authenticated:', user.id);
+
     const supabase = await createClient();
+
+    // Debug: Check if we have a valid session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    console.log('[createGroup] Session check:', {
+      hasSession: !!session,
+      userId: session?.user?.id,
+      error: sessionError
+    });
 
     // Generate unique group code
     const { data: codeData, error: codeError } = await supabase.rpc(

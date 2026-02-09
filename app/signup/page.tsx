@@ -94,6 +94,17 @@ export default function SignUpPage() {
         return;
       }
 
+      // IMPORTANT: Wait for session to be established in cookies
+      // The client has the session but server needs cookies to be set
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Verify session is accessible
+      const { data: { session: verifySession } } = await supabase.auth.getSession();
+      if (!verifySession) {
+        setAuthError('Session not established. Please sign in.');
+        return;
+      }
+
       // 2. Create the group (only if email is confirmed)
       const result = await createGroup({
         name: groupName.trim(),
@@ -175,6 +186,16 @@ export default function SignUpPage() {
           `Account created! We've sent a confirmation email to ${email}. ` +
           'Please check your inbox and click the confirmation link, then come back and sign in to join the group.'
         );
+        return;
+      }
+
+      // IMPORTANT: Wait for session to be established in cookies
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Verify session is accessible
+      const { data: { session: verifySession } } = await supabase.auth.getSession();
+      if (!verifySession) {
+        setAuthError('Session not established. Please sign in.');
         return;
       }
 
